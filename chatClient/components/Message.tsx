@@ -1,4 +1,5 @@
 import * as React from "react";
+import ReactMarkdown from "react-markdown";
 
 export interface MessageType {
   role: "assistant" | "info" | "user" | "image";
@@ -16,7 +17,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
     return (
       <div className="flex justify-start">
         <div className={`${baseClasses} bg-gray-200 text-gray-900`}>
-          {message.content}
+          <ReactMarkdown>{message.content}</ReactMarkdown>
         </div>
       </div>
     );
@@ -26,7 +27,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
     return (
       <div className="flex justify-end">
         <div className={`${baseClasses} bg-blue-600 text-white`}>
-          {message.content}
+          <ReactMarkdown>{message.content}</ReactMarkdown>
         </div>
       </div>
     );

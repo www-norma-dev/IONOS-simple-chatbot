@@ -1,3 +1,4 @@
+// ChatLog.tsx
 import * as React from "react";
 import Message, { MessageType } from "./Message";
 
@@ -21,36 +22,41 @@ const ChatLog: React.FC<ChatLogProps> = ({
 
   return (
     <>
-      <div
-        className={`chat-window overflow-auto mb-3 ${
-          userTyping || loading ? "h-[100px]" : "h-[300px]"
-        }`}
-      >
+      {/* This div grows to fill remaining vertical space and scrolls */}
+      <div className="flex-1 overflow-auto mb-3">
         <div id="chat-log" className="space-y-2 px-2">
           {messages.map((message, index) => (
             <Message key={index} message={message} />
           ))}
         </div>
       </div>
-      <div
-        className="chat-window typing-status"
-        hidden={!userTyping && !loading}
-      >
-        {userTyping && (
-          <div id="user-typing" className="flex items-center px-3">
-            <div className="h-2 w-2 animate-ping rounded-full bg-blue-500 mr-1" />
-            <div className="h-2 w-2 animate-ping rounded-full bg-blue-500 mr-1" />
-            <div className="h-2 w-2 animate-ping rounded-full bg-blue-500" />
-          </div>
-        )}
-        {loading && (
-          <div id="assistant-typing" className="flex items-center px-3">
-            <div className="h-2 w-2 animate-ping rounded-full bg-gray-500 mr-1" />
-            <div className="h-2 w-2 animate-ping rounded-full bg-gray-500 mr-1" />
+
+      {/* 
+        When `loading` is true (assistant is “typing”), show gray dots aligned left.
+      */}
+      {loading && (
+        <div className="flex w-full px-3 py-1">
+          {/* left‐justify */}
+          <div id="assistant-typing" className="flex items-center space-x-1">
+            <div className="h-2 w-2 animate-ping rounded-full bg-gray-500" />
+            <div className="h-2 w-2 animate-ping rounded-full bg-gray-500" />
             <div className="h-2 w-2 animate-ping rounded-full bg-gray-500" />
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/*
+        When `userTyping` is true, show blue dots aligned right.
+      */}
+      {userTyping && (
+        <div className="flex w-full px-3 py-1 justify-end">
+          <div id="user-typing" className="flex items-center space-x-1">
+            <div className="h-2 w-2 animate-ping rounded-full bg-blue-500" />
+            <div className="h-2 w-2 animate-ping rounded-full bg-blue-500" />
+            <div className="h-2 w-2 animate-ping rounded-full bg-blue-500" />
+          </div>
+        </div>
+      )}
     </>
   );
 };

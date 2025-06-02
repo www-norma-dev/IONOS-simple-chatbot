@@ -95,12 +95,8 @@ const Home: React.FC = () => {
     };
 
     console.log("Calling GET / with:", { url, headers });
-
     try {
-      const res = await fetch(url, {
-        method: "GET",
-        headers,
-      });
+      const res = await fetch(url, { method: "GET", headers });
       if (!res.ok) throw new Error("Failed to fetch messages");
       const data: MessageType[] = await res.json();
       setMessages(data);
@@ -121,27 +117,57 @@ const Home: React.FC = () => {
   }, [getCookie]);
 
   // Enable chat when both pageUrl and selectedModel are set
-  const handleStartChat = () => {
+  const handleStartChat = async () => {
     if (!pageUrl.trim() || !selectedModel || !apiKey) return;
-    setChatEnabled(true);
-    fetchMessages(); // load any existing chat history
+
+    setInputDisabled(true);
+    try {
+      // 1) POST /init
+      console.log("Calling POST /init with page_url:", pageUrl);
+      const initRes = await fetch(`${baseURL}/init`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+        },
+        body: JSON.stringify({ page_url: pageUrl }),
+      });
+      if (!initRes.ok) throw new Error("Failed to initialize RAG index");
+
+      const initData = await initRes.json();
+      console.log("Init response:", initData);
+
+      // 2) enable chat and fetch initial (empty) log
+      setChatEnabled(true);
+      await fetchMessages();
+    } catch (e) {
+      console.error("StartChat error:", e);
+    } finally {
+      setInputDisabled(false);
+    }
   };
 
-  // Send user message
   const handleUserInputSubmit = async (
     e?: React.FormEvent<HTMLFormElement>
   ) => {
     e?.preventDefault();
     if (!userInput.trim() || !chatEnabled || !apiKey) return;
 
-    setInputDisabled(true);
+    // 1) Immediately turn off "user is typing"
     setUserTyping(false);
+
+    // 2) Then show "assistant is typing" (loading)
+    setInputDisabled(true);
     setLoading(true);
+
+    // 3) Append the user's message to the UI
     setMessages((prev) => [...prev, { role: "user", content: userInput }]);
     setUserInput("");
 
-    const isImage = userInput.toLowerCase().startsWith("/image ");
-    const endpoint = isImage ? `${baseURL}/i` : `${baseURL}/`;
+    // 4) Fire off the fetch...
+    const endpoint = userInput.toLowerCase().startsWith("/image ")
+      ? `${baseURL}/i`
+      : `${baseURL}/`;
     const headers = {
       Accept: "application/json",
       "Content-Type": "application/json",
@@ -149,15 +175,6 @@ const Home: React.FC = () => {
       "x-model-id": selectedModel,
     };
     const body = { prompt: userInput };
-
-    console.log(
-      "Calling POST to",
-      endpoint,
-      "with body:",
-      body,
-      "and headers:",
-      headers
-    );
 
     try {
       const res = await fetch(endpoint, {
@@ -175,7 +192,7 @@ const Home: React.FC = () => {
     }
   };
 
-  // Reset chat history
+  // Reset chat history—and clear EVERYTHING on the frontend
   const onResetClick = async () => {
     if (!apiKey) return;
     setInputDisabled(true);
@@ -197,7 +214,18 @@ const Home: React.FC = () => {
       });
       if (!res.ok) throw new Error("Failed to reset chat");
       const data: MessageType[] = await res.json();
-      setMessages(data);
+
+      // 1) Clear frontend state entirely
+      setMessages([]); // no chat history
+      setChatEnabled(false); // disable chat UI
+      setSelectedModel(""); // un‐select model
+      setPageUrl(""); // clear URL field
+
+      // 2) Optionally reset cookie if you want to force re‐entry of API key:
+      //    resetCookie();
+
+      // (If backend returns an “initial” chat log that you want to display,
+      //  you can do: setMessages(data) instead.)
     } catch (e) {
       console.error("Reset error:", e);
     } finally {
@@ -304,7 +332,7 @@ const Home: React.FC = () => {
       {/*** Right Chat Area ***/}
       <div className="flex-1 flex flex-col">
         {/* Header Bar */}
-        <div className="flex items-center justify-between bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 bg-white">
           <h1 className="text-xl font-semibold">Personal Chatbot</h1>
           {chatEnabled && messages.length > 2 && (
             <Button
@@ -320,7 +348,7 @@ const Home: React.FC = () => {
 
         {/* Messages Container (flex‐1 so it grows) */}
         <div
-          className="flex-1 overflow-y-auto bg-white px-6 py-4"
+          className="flex-1 h-full overflow-y-auto bg-white px-6 py-4"
           id="chat-log"
         >
           <ChatLog
