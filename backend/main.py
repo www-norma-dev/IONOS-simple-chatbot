@@ -1,50 +1,57 @@
 import os
-import uuid
 import logging
-import httpx
 import requests
+
 from bs4 import BeautifulSoup
+from langchain_core.messages import (
+    SystemMessage,
+    HumanMessage,
+    AIMessage,
+    BaseMessage,
+)
+from langchain_openai import ChatOpenAI
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Security, status
+from fastapi import FastAPI, HTTPException, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.openapi.utils import get_openapi
-from fastapi.security import APIKeyHeader, APIKeyQuery
-from pydantic import BaseModel
+from pydantic import SecretStr, BaseModel
 from mangum import Mangum
 
-# ——— Logging setup ——————————————————————————————————————————————
+from typing import List
+
+# ─── Logging setup ───────────────────────────────────────────────────────
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s"
+    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
 )
 logger = logging.getLogger("chatbot-server")
 
-# ——— Load .env —————————————————————————————————————————————
+# ─── Load environment variables from .env ────────────────────────────────
 load_dotenv()
 
-# Shared secret for your frontend ↔ backend lock
-api_key = os.getenv("ACCEPTED_API_KEY", "")
-if not api_key:
-    raise KeyError("ACCEPTED_API_KEY not found in environment.")
+# ─── IONOS AI Model Hub config ──────────────────────────────────────────
+IONOS_API_KEY = os.getenv("IONOS_API_KEY", "")
+if not IONOS_API_KEY:
+    raise KeyError("IONOS_API_KEY not found in environment.")
 
-# IONOS LLM config\ionos_api_url = os.getenv("IONOS_API_URL", "")
-ionos_model_id = os.getenv("IONOS_MODEL_ID", "")
-ionos_api_key = os.getenv("IONOS_API_KEY", "")
-ionos_api_url=os.getenv("IONOS_API_URL", "")
-if not (ionos_api_url and ionos_model_id and ionos_api_key):
-    raise KeyError("IONOS_API_URL, IONOS_MODEL_ID or IONOS_API_KEY not found in environment.")
 
-# RAG config
-website_url = os.getenv("WEBSITE_URL", "")
-k_retrieval = int(os.getenv("RAG_K", 3))
-if not website_url:
-    raise KeyError("WEBSITE_URL not found in environment.")
+# ─── RAG configuration ───────────────────────────────────────────────────
+RAG_K = int(os.getenv("RAG_K", "3"))  # top-k chunks to retrieve
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))  # cap total number of 500-char chunks
+MAX_CHUNK_COUNT = int(os.getenv("MAX_CHUNK_COUNT", "256"))  # cap total number of chunks
 
-# ——— FastAPI setup ————————————————————————————————————————————
+
+# ─── REQUEST MODELS ───────────────────────────────────────────────────
+class NewChatRequest(BaseModel):
+    page_url: str  # <-- the front‐end will send this
+
+
+class UserMessage(BaseModel):
+    prompt: str
+
+
+# ─── FastAPI app setup ──────────────────────────────────────────────────
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 handler = Mangum(app)
 
@@ -61,138 +68,161 @@ app.add_middleware(
     max_age=3600,
 )
 
-api_key_query = APIKeyQuery(name="api-key", auto_error=False)
-api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
+# ─── Chat history state ─────────────────────────────────────────────────
+chat_log: list[BaseMessage] = []
 
-def get_api_key(
-    api_key_query: str = Security(api_key_query),
-    api_key_header: str = Security(api_key_header),
-) -> str:
-    if api_key_query == api_key or api_key_header == api_key:
-        return api_key
-    logger.warning("Unauthorized access attempt with api-key=%s header=%s", api_key_query, api_key_header)
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or missing API Key",
+
+def get_initial_chat() -> list[BaseMessage]:
+    return [
+        SystemMessage(
+            content="You are an assistant. Your role is to help the user query information about a website."
+        ),
+        AIMessage(
+            content=(
+                "Hello!\n\nI'm a personal assistant chatbot. "
+                "I will respond as best I can to any messages you send me."
+            )
+        ),
+    ]
+
+
+# ─── RAG index state ────────────────────────────────────────────────────
+vectorizer = TfidfVectorizer()
+chunk_texts: List[str] = []  # List[str]
+tfidf_matrix = None  # will become a sparse matrix after fitting
+
+
+# ─── Utility: Call IONOS /predictions endpoint ─────────────────────────────────
+async def _call_ionos_llm(model: str, prompt: str, rag: list[str]) -> str:
+    llm = ChatOpenAI(
+        model=model,
+        base_url="https://openai.inference.de-txl.ionos.com/v1",
+        api_key=SecretStr(IONOS_API_KEY),
+        temperature=0.8,
+        max_tokens=500,
     )
 
-# ——— Chat history state ————————————————————————————————————————
-EXCLUDED_CHATS = ["image", "info"]
-INITIAL_CHATLOG = [
-    {"role": "system", "content": "You are a helpful assistant"},
-    {"role": "info", "content": (
-        "Hello!\n\nI'm a personal assistant chatbot. I will respond as"
-        " best I can to any messages you send me."
-    )},
-]
-chat_log = list(INITIAL_CHATLOG)
+    rag_message = SystemMessage(
+        content="Information obtained from the website:\n" + "\n".join(rag)
+    )
+    user_message = HumanMessage(content=prompt)
 
-class UserInputIn(BaseModel):
-    prompt: str
+    chat_log.append(rag_message)
+    chat_log.append(user_message)
 
-# ——— RAG index state ——————————————————————————————————————————
-vectorizer = TfidfVectorizer()
-chunk_texts = []
-tfidf_matrix = None
+    logger.debug(
+        "Full prompt to LLM:\n%s", "\n".join(message.content for message in chat_log)
+    )
 
-@app.on_event("startup")
-def build_rag_index():
-    global chunk_texts, tfidf_matrix
-    logger.info("Scraping website for RAG index: %s", website_url)
-    resp = requests.get(website_url)
-    resp.raise_for_status()
+    response = await llm.ainvoke(chat_log)
+
+    chat_log.append(AIMessage(content=response.content))
+
+    return response.content.strip()
+
+
+@app.post("/init")
+async def init_index(
+    req: NewChatRequest,
+):
+    """
+    Rebuild the RAG index from scratch using the URL passed in the request body.
+    """
+    global chunk_texts, tfidf_matrix, chat_log
+
+    # 1) Scrape the URL that the front end sent
+    page_url = req.page_url.strip()
+    if not page_url.lower().startswith(("http://", "https://")):
+        raise HTTPException(
+            status_code=400, detail="URL must start with http:// or https://"
+        )
+
+    logger.info("Re-building RAG index using URL: %s", page_url)
+    try:
+        resp = requests.get(page_url, timeout=30)
+        resp.raise_for_status()
+    except Exception as exc:
+        logger.error("Failed to GET %s: %s", page_url, exc)
+        raise HTTPException(status_code=500, detail=f"Could not fetch page: {exc}")
+
     soup = BeautifulSoup(resp.text, "html.parser")
     paras = [p.get_text().strip() for p in soup.find_all("p") if p.get_text().strip()]
+    full_text = "\n".join(paras)
 
-    # Chunk paragraphs into 500-char slices
-    chunk_texts = []
-    for para in paras:
-        for i in range(0, len(para), 500):
-            chunk_texts.append(para[i : i + 500])
+    if not full_text.strip():
+        logger.warning("No text found at %s; RAG index will be empty", page_url)
 
-    if not chunk_texts:
-        logger.warning("No text chunks found for RAG index.")
+    # 2) Break into 500-character chunks:
+    raw_chunks: List[str] = []
+    for i in range(0, len(full_text), CHUNK_SIZE):
+        raw_chunks.append(full_text[i : i + CHUNK_SIZE])
 
-    tfidf_matrix = vectorizer.fit_transform(chunk_texts)
-    logger.info("Built TF-IDF matrix with %d chunks", len(chunk_texts))
+    # 3) Cap at MAX_CHUNKS
+    if len(raw_chunks) > MAX_CHUNK_COUNT:
+        logger.info(
+            "Truncating chunks from %d to %d (MAX_CHUNKS)",
+            len(raw_chunks),
+            MAX_CHUNK_COUNT,
+        )
+        raw_chunks = raw_chunks[:MAX_CHUNK_COUNT]
 
-# ——— IONOS LLM helper with logging —————————————————————————————————
-async def call_ionos_llm(prompt: str) -> str:
-    url = f"{ionos_api_url.rstrip('/')}/{ionos_model_id}/predictions"
-    headers = {
-        "Authorization": f"Bearer {ionos_api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "properties": {"input": prompt},
-        "option": {"temperature": 0.8, "maxTokens": 500, "seed": uuid.uuid4().int & ((1 << 16) - 1)},
-    }
-    logger.debug("IONOS request payload: %s", payload)
-    async with httpx.AsyncClient(timeout=300) as client:
-        resp = await client.post(url, headers=headers, json=payload)
-    logger.info("IONOS response status: %s", resp.status_code)
-    resp.raise_for_status()
-    output = resp.json().get("properties", {}).get("output", "").strip()
-    return output
+    chunk_texts = raw_chunks
 
-# ——— OpenAPI & Swagger UI —————————————————————————————————————
-@app.get("/docs", include_in_schema=False)
-async def get_documentation(api_key: str = Security(get_api_key)):
-    openapi_url = "/openapi.json?api-key=" + api_key
-    return get_swagger_ui_html(openapi_url=openapi_url, title="docs")
+    # 4) Fit TF-IDF (even if chunk_texts is empty, fit on [""] to avoid None)
+    if chunk_texts:
+        tfidf_matrix = vectorizer.fit_transform(chunk_texts)
+        logger.info("Built TF-IDF matrix with %d chunks", len(chunk_texts))
+    else:
+        tfidf_matrix = vectorizer.fit_transform([""])
+        logger.warning(
+            "Built TF-IDF on empty text, matrix shape=%s", tfidf_matrix.shape
+        )
 
-@app.get("/openapi.json", include_in_schema=False)
-async def openapi(api_key: str = Security(get_api_key)):
-    return get_openapi(title="FastAPI", version="0.1.0", routes=app.routes)
+    # 5) Whenever you re‐init the RAG index, you probably want to clear previous chat history:
+    chat_log = get_initial_chat()
+    return {"status": "RAG initialized", "num_chunks": len(chunk_texts)}
 
-# ——— Chat endpoints —————————————————————————————————————————
+
+# ─── Chat endpoints ─────────────────────────────────────────────────────
 @app.get("/")
 async def get_chat_logs():
+    logger.info("Received GET /; returning chat_log")
     return chat_log
+
 
 @app.post("/")
-async def chat(
-    request: Request,
-    user_input: UserInputIn,
-    api_key: str = Security(get_api_key),
-):
-    # 1) record the user's message
-    logger.info("User prompt: %s", user_input.prompt)
-    chat_log.append({"role": "user", "content": user_input.prompt})
-
-    # 2) vectorize and retrieve top-k chunks
-    user_vec = vectorizer.transform([user_input.prompt])
-    sims = cosine_similarity(user_vec, tfidf_matrix).flatten()
-    best_idxs = sims.argsort()[::-1][:k_retrieval]
-    context = "\n".join(chunk_texts[i] for i in best_idxs)
-    logger.debug("RAG context: %s", context)
-
-    # 3) build the prompt
-    prompt_text = f"Context:\n{context}\n\nConversation:\n"
-    ai_prompts = [m for m in chat_log if m["role"] not in EXCLUDED_CHATS]
-    prompt_text += "\n".join(f"{m['role']}: {m['content']}" for m in ai_prompts)
-    logger.debug("Full prompt to LLM: %s", prompt_text)
-
-    # 4) call IONOS
-    bot_response = await call_ionos_llm(prompt_text)
-    chat_log.append({"role": "assistant", "content": bot_response})
-    return chat_log
-
-@app.post("/i")
-async def gen_image(
-    request: Request,
-    user_input: UserInputIn,
-    api_key: str = Security(get_api_key),
-):
-    raise HTTPException(status_code=501, detail="Image endpoint not implemented")
-
-@app.delete("/")
-async def clear_chat_log(api_key: str = Security(get_api_key)):
+async def chat(request: Request, user_input: UserMessage):
     global chat_log
-    logger.info("Clearing chat log")
-    chat_log = list(INITIAL_CHATLOG)
-    return chat_log
 
+    # 1) Log prompt
+    logger.info("Received chat POST; prompt=%s", user_input.prompt)
+
+    # 2) RAG retrieval (unchanged) …
+    top_chunks = []
+    if chunk_texts and tfidf_matrix is not None:
+        user_vec = vectorizer.transform([user_input.prompt])
+        sims = cosine_similarity(user_vec, tfidf_matrix).flatten()
+        best_idxs = sims.argsort()[::-1][:RAG_K]
+        top_chunks = [chunk_texts[i] for i in best_idxs]
+
+    # 3) Pull the model identifier from headers
+    model_id = request.headers.get("x-model-id")
+    if not model_id:
+        raise HTTPException(status_code=400, detail="Missing x-model-id header")
+
+    # 4) Call IONOS with the dynamic model_id
+    try:
+        response_text = await _call_ionos_llm(model_id,user_input.prompt,top_chunks)
+    except Exception as exc:
+        logger.error("LLM API error: %s", exc)
+        raise HTTPException(status_code=500, detail="LLM chat error")
+
+    return response_text
+
+
+
+
+# ─── Run the app with Uvicorn if executed directly ───────────────────────
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000)
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

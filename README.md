@@ -1,55 +1,142 @@
 ![AI Chatbot Image](assets/images/cover.jpg)
 
-## Description
+## Project Overview
 
-A chatbot powered by OpenAI, presented in a iMessage-like experience, with a FastAPI backend.
+This repository contains a **full-stack RAG chatbot** powered by LangChain and IONOS, with separate **frontend** and **backend** folders:
 
-### Why this tech stack?
+* **frontend**: A Next.js (React) application that allows users to input a page URL, select a model, and chat with an AI assistant based on website content.
+* **backend**: A FastAPI service that:
 
-This project focuses on leveraging React and FastAPI to create a streamlined iMessage-like experience chatting with an AI assistant. This was also an opportunity to leverage a cloud-based deployment using AWS Lambda.
+  1. Scrapes and indexes webpage text using TF-IDF for RAG.
+  2. Routes chat requests to IONOS AI models, managing conversation history.
+  3. Exposes endpoints for initializing RAG index, fetching chat history, and sending user messages.
 
-### Why React?
+This setup can be deployed locally or on AWS Lambda (via Mangum) and uses environment variables for configuration.
 
-I've worked with React on other projects, but I wanted to build another mobile-first, simplistic, clean user interface with it which leveraged Bootstrap.
+---
 
-## Installation
+## Table of Contents
 
-Here are the things you'll need if you want to run this project locally:
+* [Prerequisites](#prerequisites)
+* [Environment Variables](#environment-variables)
+* [Backend Setup](#backend-setup)
+* [Frontend Setup](#frontend-setup)
+* [Usage](#usage)
+* [Project Structure](#project-structure)
+* [License](#license)
 
-1. [NodeJS](https://nodejs.org/en/download)
-2. [Python](https://www.python.org/downloads/)
+---
 
-Once the above is installed:
+## Prerequisites
 
-1. Clone this repository
-2. Open a terminal and navigate to the project's root directory
-3. Install the required packages via NPM
+Before you begin, ensure you have:
 
-    ```shell
-    npm install
-    ```
+* **Node.js** (v18 or above) and **npm** or **yarn**
+* **Python** (v3.10 or above)
+* **pip** or **poetry** for Python dependencies
+* An **IONOS API Key** for language model access
 
-4. Install the required packages for Python
+---
 
-    ```shell
-    cd backend/
-    python -m pip install -r requirements.txt
-    ```
+## Environment Variables
+
+Create a `.env` file in both the **frontend** and **backend** folders (or at project root if you prefer) using the following template:
+
+```dotenv
+# Frontend (Next.js)
+REACT_APP_BASE_URL=http://localhost:8000  # URL of the backend API
+
+# Shared / Backend (.env)
+IONOS_API_KEY=your_ionos_api_key_here      # IONOS AI Model Hub key
+RAG_K=3                                  # top-k RAG chunks to retrieve (default: 3)
+CHUNK_SIZE=500                            # chars per chunk (default: 500)
+MAX_CHUNK_COUNT=256                      # maximum number of chunks (default: 256)
+```
+
+* **REACT\_APP\_BASE\_URL**: URL where your backend is running, used by the frontend.
+* **IONOS\_API\_KEY**: Your secret key for accessing IONOS AI Model Hub (required by the backend).
+* **RAG\_K**: Number of top chunks to retrieve for context.
+* **CHUNK\_SIZE**: Maximum characters per chunk when splitting scraped text.
+* **MAX\_CHUNK\_COUNT**: Cap on total chunks to index.
+
+---
+
+## Backend Setup
+
+1. **Navigate** to the `backend` folder:
+
+   ```bash
+   cd backend
+   ```
+2. **Install** dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Run** the FastAPI server locally:
+
+   ```bash
+   uvicorn main:app --reload
+   ```
+
+   The backend will be available at `http://localhost:8000`.
+
+---
+
+## Frontend Setup
+
+1. **Navigate** to the `frontend` folder:
+
+   ```bash
+   cd frontend
+   ```
+2. **Install** dependencies:
+
+   ```bash
+   npm install
+   # or
+   yarn install
+   ```
+3. **Start** the development server:
+
+   ```bash
+   npm run dev
+   # or
+   yarn dev
+   ```
+
+   The frontend will be available at `http://localhost:3000`.
+
+---
 
 ## Usage
 
-Rename **_.env.template_** to **_.env_**
+1. **Open** your browser at `http://localhost:3000`.
+2. **Enter** a page URL to scrape and wait for RAG initialization.
+3. **Select** an AI model from the dropdown.
+4. **Start** chatting—messages will be sent to the backend, enriched with top-k context, and answered by your chosen model.
 
-Use of the OpenAI API requires an API token,
+---
 
-To run the project locally, you'll need to run both the client and the server:
+## Project Structure
 
-```shell
-cd frontend/
-npm run start
+```
+├── frontend             # Next.js React app
+│   ├── .env             # Frontend environment config
+│   ├── app/
+│   ├── components/
+│   ├── public/
+│   ├── lib/
+│   └── package.json
+└── backend              # FastAPI service
+    ├── .env             # Backend environment config
+    ├── main.py          # FastAPI entrypoint
+    ├── requirements.txt
+    └── other modules…
 ```
 
-```shell
-cd backend/
-python main.py
-```
+---
+
+## License
+
+This project is released under the [MIT License](LICENSE). Feel free to use and modify it in your own applications.
