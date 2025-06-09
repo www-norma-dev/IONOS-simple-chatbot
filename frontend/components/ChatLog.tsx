@@ -1,9 +1,9 @@
 // ChatLog.tsx
 import * as React from "react";
-import Message, { MessageType } from "./Message";
+import Message from "./Message";
 
 interface ChatLogProps {
-  messages: MessageType[];
+  messages: any[];
   userTyping: boolean;
   loading: boolean;
   scrollToBottom: () => void;

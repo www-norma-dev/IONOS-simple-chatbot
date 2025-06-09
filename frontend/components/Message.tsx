@@ -1,16 +1,7 @@
 import * as React from "react";
 import ReactMarkdown from "react-markdown";
 
-export interface MessageType {
-  role: "assistant" | "info" | "user" | "image";
-  content: string;
-}
-
-interface MessageProps {
-  message: MessageType;
-}
-
-const Message: React.FC<MessageProps> = ({ message }) => {
+const Message: React.FC<any> = ({ message }) => {
   const baseClasses = "my-1 px-4 py-2 rounded-lg max-w-[75%] break-words";
 
   if (message.role === "assistant" || message.role === "info") {

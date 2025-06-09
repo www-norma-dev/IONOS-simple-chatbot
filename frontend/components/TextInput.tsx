@@ -5,8 +5,6 @@ import { Button } from "@/components/ui/button";
 interface TextInputProps {
   userTyping: boolean;
   setUserTyping: (typing: boolean) => void;
-  error: boolean;
-  setError: (error: boolean) => void;
   handleKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handleUserInputSubmit: (e?: React.FormEvent<HTMLFormElement>) => void;
   userInput: string;
@@ -17,8 +15,6 @@ interface TextInputProps {
 const TextInput: React.FC<TextInputProps> = ({
   userTyping,
   setUserTyping,
-  error,
-  setError,
   handleKeyDown,
   handleUserInputSubmit,
   userInput,
@@ -26,13 +22,13 @@ const TextInput: React.FC<TextInputProps> = ({
   inputDisabled,
 }) => {
   const onUserInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (e.target.value.length === 0) {
+    const value = e.target.value;
+    if (value.length === 0) {
       setUserTyping(false);
     } else if (!userTyping) {
       setUserTyping(true);
-      setError(false);
     }
-    setUserInput(e.target.value);
+    setUserInput(value);
   };
 
   return (
@@ -44,18 +40,20 @@ const TextInput: React.FC<TextInputProps> = ({
         handleUserInputSubmit();
       }}
     >
-      {error && <p className="text-sm text-red-600">Please enter a prompt.</p>}
       <Textarea
         id="user-input"
         name="user_input"
-        placeholder="Type message"
+        placeholder="Type your message..."
         onKeyDown={handleKeyDown}
         onChange={onUserInputChange}
         value={userInput}
         disabled={inputDisabled}
         className="flex-1 resize-none"
       />
-      <Button type="submit" disabled={inputDisabled}>
+      <Button
+        type="submit"
+        disabled={inputDisabled || userInput.trim().length === 0}
+      >
         <svg
           xmlns="http://www.w3.org/2000/svg"
           className="h-5 w-5"
@@ -64,7 +62,11 @@ const TextInput: React.FC<TextInputProps> = ({
           stroke="currentColor"
           strokeWidth="2"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M5 13l4 4L19 7"
+          />
         </svg>
       </Button>
     </form>

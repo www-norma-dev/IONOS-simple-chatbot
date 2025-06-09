@@ -187,50 +187,39 @@ async def init_index(
 @app.get("/")
 async def get_chat_logs():
     logger.info("Received GET /; returning chat_log")
-    return [message.content for message in chat_log]
+    return chat_log
 
 
 @app.post("/")
-async def chat(
-    request: Request,
-    user_input: UserMessage,
-):
+async def chat(request: Request, user_input: UserMessage):
     global chat_log
 
-    # 1) Log headers & prompt
-    headers = dict(request.headers)
-    logger.info("Received POST / with headers: %s", headers)
-    logger.info("Received POST / body (prompt): %s", user_input.prompt)
+    # 1) Log prompt
+    logger.info("Received chat POST; prompt=%s", user_input.prompt)
 
-    # 2) TF-IDF retrieval (if we have chunks)
-    top_chunks = ""
+    # 2) RAG retrieval (unchanged) …
+    top_chunks = []
     if chunk_texts and tfidf_matrix is not None:
         user_vec = vectorizer.transform([user_input.prompt])
         sims = cosine_similarity(user_vec, tfidf_matrix).flatten()
         best_idxs = sims.argsort()[::-1][:RAG_K]
-        top_chunks = [chunk_texts[i] for i in best_idxs if i < len(chunk_texts)]
-        logger.debug("RAG context (top %d chunks): %s", RAG_K, top_chunks)
-    else:
-        logger.warning("TF-IDF not initialized or no chunks; skipping RAG context.")
+        top_chunks = [chunk_texts[i] for i in best_idxs]
 
-    # 3) Call IONOS
+    # 3) Pull the model identifier from headers
+    model_id = request.headers.get("x-model-id")
+    if not model_id:
+        raise HTTPException(status_code=400, detail="Missing x-model-id header")
+
+    # 4) Call IONOS with the dynamic model_id
     try:
-        response = await _call_ionos_llm(
-            "mistralai/Mixtral-8x7B-Instruct-v0.1", user_input.prompt, top_chunks
-        )
+        response_text = await _call_ionos_llm(model_id,user_input.prompt,top_chunks)
     except Exception as exc:
-        logger.error("IONOS predictions API error: %s", exc)
+        logger.error("LLM API error: %s", exc)
         raise HTTPException(status_code=500, detail="LLM chat error")
 
-    return response
+    return response_text
 
 
-@app.delete("/")
-async def clear_chat_log(api_key: str = Security(get_api_key)):
-    global chat_log
-    logger.info("Received DELETE /; clearing chat_log")
-    chat_log = get_initial_chat()
-    return chat_log
 
 
 # ─── Run the app with Uvicorn if executed directly ───────────────────────
