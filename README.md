@@ -1,11 +1,13 @@
 ![AI Chatbot Image](assets/images/cover.jpg)
 
+![Screenshot](assets/images/screenshot.png)
+
 ## Project Overview
 
 This repository contains a **full-stack RAG chatbot** powered by LangChain and IONOS, with separate **frontend** and **backend** folders:
 
-* **frontend**: A Next.js (React) application that allows users to input a page URL, select a model, and chat with an AI assistant based on website content.
-* **backend**: A FastAPI service that:
+- **frontend**: A Next.js (React) application that allows users to input a page URL, select a model, and chat with an AI assistant based on website content.
+- **backend**: A FastAPI service that:
 
   1. Scrapes and indexes webpage text using TF-IDF for RAG.
   2. Routes chat requests to IONOS AI models, managing conversation history.
@@ -17,13 +19,13 @@ This setup can be deployed locally or on AWS Lambda (via Mangum) and uses enviro
 
 ## Table of Contents
 
-* [Prerequisites](#prerequisites)
-* [Environment Variables](#environment-variables)
-* [Backend Setup](#backend-setup)
-* [Frontend Setup](#frontend-setup)
-* [Usage](#usage)
-* [Project Structure](#project-structure)
-* [License](#license)
+- [Prerequisites](#prerequisites)
+- [Environment Variables](#environment-variables)
+- [Backend Setup](#backend-setup)
+- [Frontend Setup](#frontend-setup)
+- [Usage](#usage)
+- [Project Structure](#project-structure)
+- [License](#license)
 
 ---
 
@@ -31,10 +33,10 @@ This setup can be deployed locally or on AWS Lambda (via Mangum) and uses enviro
 
 Before you begin, ensure you have:
 
-* **Node.js** (v18 or above) and **npm** or **yarn**
-* **Python** (v3.10 or above)
-* **pip** or **poetry** for Python dependencies
-* An **IONOS API Key** for language model access
+- **Node.js** (v18 or above) and **npm** or **yarn**
+- **Python** (v3.10 or above)
+- **pip** or **poetry** for Python dependencies
+- An **IONOS API Key** for language model access
 
 ---
 
@@ -53,11 +55,11 @@ CHUNK_SIZE=500                            # chars per chunk (default: 500)
 MAX_CHUNK_COUNT=256                      # maximum number of chunks (default: 256)
 ```
 
-* **REACT\_APP\_BASE\_URL**: URL where your backend is running, used by the frontend.
-* **IONOS\_API\_KEY**: Your secret key for accessing IONOS AI Model Hub (required by the backend).
-* **RAG\_K**: Number of top chunks to retrieve for context.
-* **CHUNK\_SIZE**: Maximum characters per chunk when splitting scraped text.
-* **MAX\_CHUNK\_COUNT**: Cap on total chunks to index.
+- **REACT_APP_BASE_URL**: URL where your backend is running, used by the frontend.
+- **IONOS_API_KEY**: Your secret key for accessing IONOS AI Model Hub (required by the backend).
+- **RAG_K**: Number of top chunks to retrieve for context.
+- **CHUNK_SIZE**: Maximum characters per chunk when splitting scraped text.
+- **MAX_CHUNK_COUNT**: Cap on total chunks to index.
 
 ---
 
@@ -68,11 +70,13 @@ MAX_CHUNK_COUNT=256                      # maximum number of chunks (default: 25
    ```bash
    cd backend
    ```
+
 2. **Install** dependencies:
 
    ```bash
    pip install -r requirements.txt
    ```
+
 3. **Run** the FastAPI server locally:
 
    ```bash
@@ -90,6 +94,7 @@ MAX_CHUNK_COUNT=256                      # maximum number of chunks (default: 25
    ```bash
    cd frontend
    ```
+
 2. **Install** dependencies:
 
    ```bash
@@ -97,6 +102,7 @@ MAX_CHUNK_COUNT=256                      # maximum number of chunks (default: 25
    # or
    yarn install
    ```
+
 3. **Start** the development server:
 
    ```bash

@@ -17,7 +17,7 @@ const Message: React.FC<any> = ({ message }) => {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className={`${baseClasses} bg-blue-600 text-white`}>
+        <div className={`${baseClasses} bg-black text-white`}>
           <ReactMarkdown>{message.content}</ReactMarkdown>
         </div>
       </div>
