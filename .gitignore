@@ -1,0 +1,8 @@
+dependencies/
+*/aws_lambda_artifact.zip
+.idea/
+__pycache__/
+.env
+venv/
+backendvenv/
+node_modules/
