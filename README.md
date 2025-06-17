@@ -42,20 +42,22 @@ Before you begin, ensure you have:
 
 ## Environment Variables
 
-Create a `.env` file in both the **frontend** and **backend** folders (or at project root if you prefer) using the following template:
+Create a `.env` file in both the **frontend** and **backend** folders using the following template:
+(you can instead create a single unique .env file at project root if you prefer)
 
 ```dotenv
 # Frontend (Next.js)
-REACT_APP_BASE_URL=http://localhost:8000  # URL of the backend API
+NEXT_PUBLIC_APP_BASE_URL=http://localhost:8000  # URL of the backend API
 
 # Shared / Backend (.env)
-IONOS_API_KEY=your_ionos_api_key_here      # IONOS AI Model Hub key
-RAG_K=3                                  # top-k RAG chunks to retrieve (default: 3)
-CHUNK_SIZE=500                            # chars per chunk (default: 500)
-MAX_CHUNK_COUNT=256                      # maximum number of chunks (default: 256)
+IONOS_API_KEY=your_ionos_api_key_here           # IONOS AI Model Hub key
+RAG_K=3                                         # top-k RAG chunks to retrieve (default: 3)
+CHUNK_SIZE=500                                  # chars per chunk (default: 500)
+MAX_CHUNK_COUNT=256                             # maximum number of chunks (default: 256)
 ```
 
-- **REACT_APP_BASE_URL**: URL where your backend is running, used by the frontend.
+- **NEXT_PUBLIC_APP_BASE_URL**: URL where your backend is running, used by the frontend.
+
 - **IONOS_API_KEY**: Your secret key for accessing IONOS AI Model Hub (required by the backend).
 - **RAG_K**: Number of top chunks to retrieve for context.
 - **CHUNK_SIZE**: Maximum characters per chunk when splitting scraped text.
@@ -80,7 +82,7 @@ MAX_CHUNK_COUNT=256                      # maximum number of chunks (default: 25
 3. **Run** the FastAPI server locally:
 
    ```bash
-   uvicorn main:app --reload
+   python main.py
    ```
 
    The backend will be available at `http://localhost:8000`.
