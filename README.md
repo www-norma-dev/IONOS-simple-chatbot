@@ -13,8 +13,6 @@ This repository contains a **full-stack RAG chatbot** powered by LangChain and I
   2. Routes chat requests to IONOS AI models, managing conversation history.
   3. Exposes endpoints for initializing RAG index, fetching chat history, and sending user messages.
 
-This setup can be deployed locally or on AWS Lambda (via Mangum) and uses environment variables for configuration.
-
 ---
 
 ## Table of Contents
