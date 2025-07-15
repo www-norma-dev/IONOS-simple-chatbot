@@ -39,7 +39,7 @@ jobs:
             exit 1
           fi
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -54,21 +54,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: docs/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('docs/package-lock.json','docs/yarn.lock') }}-${{ hashFiles('docs/**/*.[jt]s','docs/**/*.[jt]sx') }}
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('docs/yarn.lock','docs/package-lock.json') }}-${{ hashFiles('docs/**/*.[jt]s','docs/**/*.[jt]sx') }}
           restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('docs/package-lock.json','docs/yarn.lock') }}-
+            ${{ runner.os }}-nextjs-${{ hashFiles('docs/yarn.lock','docs/package-lock.json') }}-
 
       - name: Install dependencies
         working-directory: docs
         run: ${{ steps.detect-package-manager.outputs.manager }} ${{ steps.detect-package-manager.outputs.command }}
 
-      - name: Build
+      - name: Build with Next.js
         working-directory: docs
         run: ${{ steps.detect-package-manager.outputs.runner }} next build
-
-      - name: Export static HTML
-        working-directory: docs
-        run: ${{ steps.detect-package-manager.outputs.runner }} next export -o out
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -81,7 +77,6 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
