@@ -7,6 +7,7 @@ import {
   Star,
   Users,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { JSX } from "react";
 
@@ -133,8 +134,10 @@ export default function Home(): JSX.Element {
 
             {/* Right Image */}
             <div className="relative lg:order-last">
-              <img
+              <Image
                 src="/assets/hero.png"
+                width={500}
+                height={500}
                 alt="Hero illustration"
                 className="w-full !max-w-[600px] rounded-3xl shadow-2xl"
               />
