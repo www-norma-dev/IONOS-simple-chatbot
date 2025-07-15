@@ -1,3 +1,7 @@
+# Sample workflow for building and deploying a Next.js site to GitHub Pages
+#
+# To get started with Next.js see: https://nextjs.org/docs/getting-started
+#
 name: Deploy Next.js site to Pages
 
 on:
@@ -15,9 +19,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Build job
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,10 +34,18 @@ jobs:
             echo "manager=yarn" >> $GITHUB_OUTPUT
             echo "command=install" >> $GITHUB_OUTPUT
             echo "runner=yarn" >> $GITHUB_OUTPUT
+            exit 0
+          elif [ -f pnpm-lock.yaml ]; then
+            echo "manager=pnpm" >> $GITHUB_OUTPUT
+            echo "command=install" >> $GITHUB_OUTPUT
+            echo "runner=pnpm" >> $GITHUB_OUTPUT
+            npm install -g pnpm
+            exit 0
           elif [ -f package.json ]; then
             echo "manager=npm" >> $GITHUB_OUTPUT
             echo "command=ci" >> $GITHUB_OUTPUT
             echo "runner=npx --no-install" >> $GITHUB_OUTPUT
+            exit 0
           else
             echo "Unable to determine package manager"
             exit 1
@@ -42,22 +54,23 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "lts/*"
+          cache: ${{ steps.detect-package-manager.outputs.manager }}
           cache-dependency-path: |
             docs/yarn.lock
+            docs/pnpm-lock.yaml
+            docs/package-lock.json
 
       - name: Setup Pages
-        uses: actions/configure-pages@v5
-        with:
-          static_site_generator: next
+        uses: actions/configure-pages@v4
 
       - name: Restore cache
         uses: actions/cache@v4
         with:
           path: docs/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('docs/yarn.lock','docs/package-lock.json') }}-${{ hashFiles('docs/**/*.[jt]s','docs/**/*.[jt]sx') }}
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('docs/yarn.lock','docs/pnpm-lock.yaml','docs/package-lock.json') }}-${{ hashFiles('docs/**/*.[jt]s','docs/**/*.[jt]sx') }}
           restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('docs/yarn.lock','docs/package-lock.json') }}-
+            ${{ runner.os }}-nextjs-${{ hashFiles('docs/yarn.lock','docs/pnpm-lock.yaml','docs/package-lock.json') }}-
 
       - name: Install dependencies
         working-directory: docs
@@ -67,15 +80,12 @@ jobs:
         working-directory: docs
         run: ${{ steps.detect-package-manager.outputs.runner }} next build
 
-      - name: Export static HTML
-        working-directory: docs
-        run: npm run export
-
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs/out
 
+  # Deployment job
   deploy:
     needs: build
     runs-on: ubuntu-latest
