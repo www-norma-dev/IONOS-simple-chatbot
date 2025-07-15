@@ -12,5 +12,8 @@ const withNextra = nextra({
 export default withNextra({
   pageExtensions: ["js", "jsx", "ts", "tsx", "md", "mdx"],
   reactStrictMode: true,
-  distDir: "out",
+  output: "export",
+  images: {
+    unoptimized: true,
+  },
 });
