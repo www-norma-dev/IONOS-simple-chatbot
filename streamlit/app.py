@@ -45,7 +45,6 @@ st.sidebar.markdown("---")
 st.title("IONOS Chatbot 🗨️")
 
 if "chat_history" not in st.session_state:
-    # On first load, fetch from backend
     try:
         resp = requests.get(f"{BACKEND_URL}/", headers={"x-model-id": model})
         if resp.ok:
@@ -71,7 +70,6 @@ with st.form("chat_form", clear_on_submit=True):
     send_btn = st.form_submit_button("Send", use_container_width=True)
 
 if send_btn and user_message.strip():
-    # Append user message to session state immediately
     st.session_state["chat_history"].append({"type": "human", "content": user_message})
     
     # Create a placeholder for the bot response
@@ -83,21 +81,17 @@ if send_btn and user_message.strip():
                 headers={"x-model-id": model},
             )
             if resp.ok:
-                # Append bot response to session state immediately
                 st.session_state["chat_history"].append({"type": "ai", "content": resp.text})
                 
-                # Optional: Sync with backend to ensure consistency
                 try:
                     hist_resp = requests.get(f"{BACKEND_URL}/", headers={"x-model-id": model})
                     if hist_resp.ok:
                         backend_history = hist_resp.json()
-                        # Only update if backend has more recent data
                         if len(backend_history) > len(st.session_state["chat_history"]):
                             st.session_state["chat_history"] = backend_history
                 except Exception:
-                    pass  # If sync fails, continue with local state
+                    pass  
                 
-                # Force UI refresh to show the new messages
                 st.rerun()
             else:
                 st.error(f"Failed: {resp.text}")
