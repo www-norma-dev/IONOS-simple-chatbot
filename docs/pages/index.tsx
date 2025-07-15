@@ -60,7 +60,7 @@ export default function Home(): JSX.Element {
           </div>
           <Link
             href="#"
-            className="flex items-center space-x-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-100 transition-all duration-300 transform hover:scale-105 text-gray-900 backdrop-blur-sm"
+            className="flex items-center space-x-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-100 transition-all duration-300 transform hover:scale-105 !text-gray-900 backdrop-blur-sm"
           >
             <Github className="h-4 w-4" />
             <span className="hidden sm:inline">GitHub</span>

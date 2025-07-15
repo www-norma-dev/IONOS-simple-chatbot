@@ -67,6 +67,10 @@ jobs:
         working-directory: docs
         run: ${{ steps.detect-package-manager.outputs.runner }} next build
 
+      - name: Export static HTML
+        working-directory: docs
+        run: npm run export
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
