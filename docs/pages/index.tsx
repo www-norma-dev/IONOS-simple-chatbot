@@ -12,6 +12,8 @@ import Link from "next/link";
 import { JSX } from "react";
 
 export default function Home(): JSX.Element {
+  const base = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-100 via-white to-purple-300 transition-colors duration-300">
       {/* Navigation */}
@@ -135,10 +137,11 @@ export default function Home(): JSX.Element {
             {/* Right Image */}
             <div className="relative lg:order-last">
               <Image
-                src="/assets/hero.png"
+                src={`${base}/assets/hero.png`}
                 width={500}
                 height={500}
                 alt="Hero illustration"
+                unoptimized
                 className="w-full !max-w-[600px] rounded-3xl shadow-2xl"
               />
             </div>
