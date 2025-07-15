@@ -16,4 +16,6 @@ export default withNextra({
   images: {
     unoptimized: true,
   },
+  basePath: "/IONOS-simple-chatbot",
+  assetPrefix: "/IONOS-simple-chatbot/",
 });
