@@ -1,8 +1,8 @@
-name: Deploy Next.js site to Pages
+name: Deploy Docs to GitHub Pages
 
 on:
   push:
-    branches: ["main"]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -12,25 +12,31 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: ${{ steps.detect.outputs.manager }}
+          cache-dependency-path: docs/package-lock.json
+
       - name: Detect package manager
-        id: detect-package-manager
+        id: detect
         working-directory: docs
         run: |
           if [ -f yarn.lock ]; then
             echo "manager=yarn" >> $GITHUB_OUTPUT
             echo "command=install" >> $GITHUB_OUTPUT
             echo "runner=yarn" >> $GITHUB_OUTPUT
-          elif [ -f package.json ]; then
+          elif [ -f package-lock.json ]; then
             echo "manager=npm" >> $GITHUB_OUTPUT
             echo "command=ci" >> $GITHUB_OUTPUT
             echo "runner=npx --no-install" >> $GITHUB_OUTPUT
@@ -39,32 +45,19 @@ jobs:
             exit 1
           fi
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: ${{ steps.detect-package-manager.outputs.manager }}
+      - name: Install dependencies
+        working-directory: docs
+        run: ${{ steps.detect.outputs.manager }} ${{ steps.detect.outputs.command }}
+
+      - name: Build Next.js (static export)
+        working-directory: docs
+        run: ${{ steps.detect.outputs.runner }} next build
 
       - name: Setup Pages
+        id: pages
         uses: actions/configure-pages@v5
         with:
           static_site_generator: next
-
-      - name: Restore cache
-        uses: actions/cache@v4
-        with:
-          path: docs/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('docs/yarn.lock','docs/package-lock.json') }}-${{ hashFiles('docs/**/*.[jt]s','docs/**/*.[jt]sx') }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('docs/yarn.lock','docs/package-lock.json') }}-
-
-      - name: Install dependencies
-        working-directory: docs
-        run: ${{ steps.detect-package-manager.outputs.manager }} ${{ steps.detect-package-manager.outputs.command }}
-
-      - name: Build with Next.js
-        working-directory: docs
-        run: ${{ steps.detect-package-manager.outputs.runner }} next build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -76,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.pages.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
