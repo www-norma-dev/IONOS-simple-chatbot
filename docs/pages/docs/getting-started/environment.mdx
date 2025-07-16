@@ -1,0 +1,26 @@
+# Environment Variables
+
+Create a `.env` file in both `frontend` and `backend` folders, or one at the root.
+
+## Frontend `.env`
+
+```dotenv
+NEXT_PUBLIC_APP_BASE_URL=http://localhost:8000
+```
+
+## Backend `.env`
+
+```dotenv
+IONOS_API_KEY=your_ionos_api_key_here
+RAG_K=3
+CHUNK_SIZE=500
+MAX_CHUNK_COUNT=256
+```
+
+### Variable Description
+
+- **NEXT_PUBLIC_APP_BASE_URL**: URL of the backend for API calls.
+- **IONOS_API_KEY**: Secret key for IONOS models.
+- **RAG_K**: Number of top chunks for retrieval.
+- **CHUNK_SIZE**: Max characters per chunk.
+- **MAX_CHUNK_COUNT**: Total chunks to index.
