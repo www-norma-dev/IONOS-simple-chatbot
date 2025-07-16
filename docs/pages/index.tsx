@@ -27,24 +27,35 @@ export default function Home(): JSX.Element {
           {[
             {
               label: "Features",
-              href: "/",
+              scrollToId: "features",
             },
             {
               label: "Documentation",
               href: "/docs",
             },
-            {
-              label: "Examples",
-              href: "/",
-            },
           ].map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className="text-gray-700 hover:text-gray-900 transition-colors font-medium"
-            >
-              {item.label}
-            </Link>
+            <div key={item.label}>
+              {item.href ? (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className="text-gray-700 hover:text-gray-900 transition-colors"
+                >
+                  <span className="font-medium">{item.label}</span>
+                </Link>
+              ) : (
+                <button
+                  key={item.label}
+                  onClick={() => {
+                    const section = document.getElementById(item.scrollToId!);
+                    if (section) section.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="text-gray-700 hover:text-gray-900 transition-colors bg-transparent border-none p-0 cursor-pointer"
+                >
+                  <span className="font-medium">{item.label}</span>
+                </button>
+              )}
+            </div>
           ))}
         </div>
         <div className="flex items-center space-x-4">
@@ -59,7 +70,9 @@ export default function Home(): JSX.Element {
             </div>
           </div>
           <Link
-            href="#"
+            href="https://github.com/www-norma-dev/IONOS-simple-chatbot"
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex items-center space-x-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-100 transition-all duration-300 transform hover:scale-105 text-gray-900 backdrop-blur-sm"
           >
             <Github className="h-4 w-4" />
@@ -104,10 +117,15 @@ export default function Home(): JSX.Element {
                   <span>Get Started Guide</span>
                   <ArrowRight className="h-6 w-6 group-hover:translate-x-1 transition-transform" />
                 </Link>
-                <button className="inline-flex items-center justify-center space-x-3 px-10 py-5 rounded-xl font-semibold text-xl transition-all duration-300 border border-gray-300 bg-white hover:bg-gray-100 text-gray-900 backdrop-blur-sm">
+                <Link
+                  href="https://github.com/www-norma-dev/IONOS-simple-chatbot"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center space-x-3 px-10 py-5 rounded-xl font-semibold text-xl transition-all duration-300 border border-gray-300 bg-white hover:bg-gray-100 text-gray-900 backdrop-blur-sm"
+                >
                   <Github className="h-6 w-6" />
                   <span>View on GitHub</span>
-                </button>
+                </Link>
               </div>
 
               {/* Stats */}
@@ -209,14 +227,16 @@ export default function Home(): JSX.Element {
               </p>
               <div className="flex flex-col sm:flex-row justify-center gap-8">
                 <Link
-                  href="#"
+                  href="https://github.com/www-norma-dev/IONOS-simple-chatbot"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center justify-center space-x-2 bg-black hover:bg-gray-900 !text-white px-10 py-4 rounded-xl font-semibold text-base transition-transform hover:scale-105 shadow"
                 >
                   <span>View on GitHub</span>
                   <Github className="h-5 w-5" />
                 </Link>
                 <Link
-                  href="#"
+                  href="/docs"
                   className="inline-flex items-center justify-center space-x-2 bg-white hover:bg-gray-100 text-blue-600 px-10 py-4 rounded-xl font-semibold text-base transition-transform hover:scale-105 border border-blue-200 shadow"
                 >
                   <span>Read Documentation</span>
