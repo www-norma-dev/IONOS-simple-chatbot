@@ -1,0 +1,303 @@
+"""
+ReAct Agent implementation using LangGraph for extensible agent architecture.
+"""
+
+import json
+import logging
+from typing import Dict, List, Any, Optional, TypedDict, Annotated
+from dataclasses import dataclass
+from functools import reduce
+from operator import add
+
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, END
+from pydantic import SecretStr
+
+from .Collectors import WebScraper
+
+logger = logging.getLogger("chatbot-server")
+
+
+def add_messages(left: List[BaseMessage], right: List[BaseMessage]) -> List[BaseMessage]:
+    """Add messages function for state management."""
+    return left + right
+
+
+class AgentState(TypedDict):
+    """State of the ReAct agent."""
+    messages: Annotated[List[BaseMessage], add_messages]
+    current_url: Optional[str]
+    rag_chunks: List[str]
+    reasoning: str
+    next_action: Optional[str]
+    context: str
+
+
+@dataclass
+class ReActConfig:
+    """Configuration for the ReAct agent."""
+    model_name: str
+    api_key: str
+    base_url: str
+    temperature: float = 0.1
+    max_tokens: int = 1000
+    chunk_size: int = 500
+    max_chunk_count: int = 256
+    max_iterations: int = 5
+
+
+class ReActAgent:
+    """
+    ReAct (Reasoning + Acting) Agent using LangGraph for extensible architecture.
+    
+    This agent uses a graph-based workflow for better extensibility and control.
+    """
+    
+    def __init__(self, config: ReActConfig):
+        self.config = config
+        self.web_scraper = WebScraper(
+            chunk_size=config.chunk_size,
+            max_chunk_count=config.max_chunk_count
+        )
+        
+        # Initialize LLM
+        self.llm = ChatOpenAI(
+            model=config.model_name,
+            base_url=config.base_url,
+            api_key=SecretStr(config.api_key),
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+        )
+        
+        # Build the workflow graph
+        self.workflow = self._build_workflow()
+        self.app = self.workflow.compile()
+    
+    def _build_workflow(self) -> StateGraph:
+        """Build the LangGraph workflow for the ReAct agent."""
+        
+        # Create the state graph
+        workflow = StateGraph(AgentState)
+        
+        # Add nodes
+        workflow.add_node("reasoning", self._reasoning_node)
+        workflow.add_node("context_preparation", self._context_preparation_node)
+        workflow.add_node("response_generation", self._response_generation_node)
+        
+        # Set entry point
+        workflow.set_entry_point("reasoning")
+        
+        # Add edges
+        workflow.add_edge("reasoning", "context_preparation")
+        workflow.add_edge("context_preparation", "response_generation")
+        workflow.add_edge("response_generation", END)
+        
+        return workflow
+    
+    async def _reasoning_node(self, state: AgentState) -> Dict[str, Any]:
+        """Node for reasoning about the user's query."""
+        logger.debug("Entering reasoning node")
+        
+        # Get the last user message
+        user_message = None
+        for msg in reversed(state["messages"]):
+            if isinstance(msg, HumanMessage):
+                user_message = msg.content
+                break
+        
+        if not user_message:
+            return {
+                "reasoning": "No user message found",
+                "next_action": "respond_directly"
+            }
+        
+        # Create reasoning prompt
+        reasoning_prompt = f"""
+You are an intelligent assistant with reasoning capabilities. Analyze the user's query and determine the best approach.
+
+Current context:
+- User message: "{user_message}"
+- Current URL: {state.get("current_url", "None")}
+- Available RAG chunks: {len(state.get("rag_chunks", []))} chunks
+
+Think step by step:
+1. What is the user asking for?
+2. Do I have sufficient information from the RAG chunks to answer?
+3. What's the best way to structure my response?
+4. Are there any specific aspects I should focus on?
+
+Provide your reasoning analysis:
+"""
+        
+        messages = [SystemMessage(content=reasoning_prompt)]
+        response = await self.llm.ainvoke(messages)
+        
+        reasoning_text = response.content
+        logger.debug(f"Reasoning: {reasoning_text}")
+        
+        return {
+            "reasoning": reasoning_text,
+            "next_action": "respond_directly"
+        }
+    
+    async def _context_preparation_node(self, state: AgentState) -> Dict[str, Any]:
+        """Node for preparing context from RAG chunks."""
+        logger.debug("Entering context preparation node")
+        
+        rag_chunks = state.get("rag_chunks", [])
+        current_url = state.get("current_url")
+        
+        # Prepare context from RAG chunks
+        context_parts = []
+        
+        if rag_chunks:
+            context_parts.append(f"Information from {current_url or 'the website'}:")
+            for i, chunk in enumerate(rag_chunks[:5]):  # Limit to first 5 chunks
+                context_parts.append(f"Chunk {i+1}: {chunk}")
+        else:
+            context_parts.append("No relevant information found in the knowledge base.")
+        
+        context = "\n".join(context_parts)
+        logger.debug(f"Prepared context with {len(rag_chunks)} chunks")
+        
+        return {"context": context}
+    
+    async def _response_generation_node(self, state: AgentState) -> Dict[str, Any]:
+        """Node for generating the final response."""
+        logger.debug("Entering response generation node")
+        
+        # Get the user's question
+        user_message = None
+        for msg in reversed(state["messages"]):
+            if isinstance(msg, HumanMessage):
+                user_message = msg.content
+                break
+        
+        context = state.get("context", "No context available.")
+        reasoning = state.get("reasoning", "")
+        
+        # Create response prompt
+        response_prompt = f"""
+You are a helpful assistant. Based on your reasoning and the available information, provide a comprehensive answer to the user's question.
+
+Your Reasoning:
+{reasoning}
+
+Available Information:
+{context}
+
+User Question: {user_message}
+
+Guidelines:
+1. Use the reasoning you provided to structure your response
+2. Base your answer on the available information
+3. Be helpful, accurate, and well-structured
+4. If information is insufficient, be honest about limitations
+5. Provide actionable insights when possible
+
+Response:
+"""
+        
+        messages = [SystemMessage(content=response_prompt)]
+        response = await self.llm.ainvoke(messages)
+        
+        # Create the AI message for the conversation
+        ai_message = AIMessage(content=response.content.strip())
+        
+        return {"messages": [ai_message]}
+    
+    async def process_message_with_rag(self, message: str, rag_chunks: List[str], current_url: Optional[str] = None) -> str:
+        """
+        Process a user message using pre-retrieved RAG chunks through the LangGraph workflow.
+        
+        Args:
+            message: The user's message
+            rag_chunks: Pre-retrieved relevant chunks from RAG
+            current_url: Optional current URL context
+            
+        Returns:
+            The agent's response
+        """
+        try:
+            # Create initial state
+            initial_state = AgentState(
+                messages=[HumanMessage(content=message)],
+                current_url=current_url,
+                rag_chunks=rag_chunks,
+                reasoning="",
+                next_action=None,
+                context=""
+            )
+            
+            # Run the workflow
+            final_state = await self.app.ainvoke(initial_state)
+            
+            # Get the last AI message
+            for msg in reversed(final_state["messages"]):
+                if isinstance(msg, AIMessage):
+                    return msg.content
+            
+            return "I apologize, but I couldn't generate a response."
+            
+        except Exception as e:
+            logger.error(f"Error in LangGraph workflow: {str(e)}")
+            return f"I apologize, but I encountered an error while processing your request: {str(e)}"
+    
+    async def process_message(self, message: str, current_url: Optional[str] = None) -> str:
+        """
+        Process a user message through the LangGraph workflow (with dynamic scraping if needed).
+        
+        Args:
+            message: The user's message
+            current_url: Optional current URL context
+            
+        Returns:
+            The agent's response
+        """
+        # For now, this method can be used for future extensions with dynamic scraping
+        # Currently, we primarily use process_message_with_rag
+        return await self.process_message_with_rag(message, [], current_url)
+    
+    def extend_workflow(self, node_name: str, node_function, connections: Dict[str, str] = None):
+        """
+        Extend the workflow with new nodes (for future extensibility).
+        
+        Args:
+            node_name: Name of the new node
+            node_function: Function to execute for this node
+            connections: Dictionary of connections {from_node: to_node}
+        """
+        # This is a placeholder for future extensibility
+        # In a production system, you'd rebuild the workflow with new nodes
+        logger.info(f"Workflow extension requested: {node_name}")
+        pass
+
+
+# Factory function for creating ReAct agent
+def create_react_agent(
+    model_name: str,
+    api_key: str,
+    base_url: str,
+    **kwargs
+) -> ReActAgent:
+    """
+    Factory function to create a ReAct agent with LangGraph.
+    
+    Args:
+        model_name: Name of the model to use
+        api_key: API key for the model
+        base_url: Base URL for the model API
+        **kwargs: Additional configuration parameters
+        
+    Returns:
+        Configured ReAct agent with LangGraph workflow
+    """
+    config = ReActConfig(
+        model_name=model_name,
+        api_key=api_key,
+        base_url=base_url,
+        **kwargs
+    )
+    
+    return ReActAgent(config)

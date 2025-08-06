@@ -7,7 +7,6 @@ from langchain_core.messages import (
     AIMessage,
     BaseMessage,
 )
-from langchain_openai import ChatOpenAI
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -19,6 +18,7 @@ from mangum import Mangum
 
 from typing import List
 from agents.Collectors import WebScraper
+from agents import create_react_agent
 
 # ─── Logging setup ───────────────────────────────────────────────────────
 logging.basicConfig(
@@ -69,6 +69,15 @@ app.add_middleware(
 
 # ─── Chat history state ─────────────────────────────────────────────────
 chat_log: list[BaseMessage] = []
+current_url: str = ""  # Track the current URL being discussed
+
+# ─── RAG index state ────────────────────────────────────────────────────
+vectorizer = TfidfVectorizer()
+chunk_texts: List[str] = []  # List[str]
+tfidf_matrix = None  # will become a sparse matrix after fitting
+
+# ─── ReAct Agent ────────────────────────────────────────────────────────
+react_agent = None  # Will be initialized when needed
 
 
 def get_initial_chat() -> list[BaseMessage]:
@@ -85,42 +94,9 @@ def get_initial_chat() -> list[BaseMessage]:
     ]
 
 
-# ─── RAG index state ────────────────────────────────────────────────────
-vectorizer = TfidfVectorizer()
-chunk_texts: List[str] = []  # List[str]
-tfidf_matrix = None  # will become a sparse matrix after fitting
-
 # ─── WebScraper instance ────────────────────────────────────────────────
 web_scraper = WebScraper(chunk_size=CHUNK_SIZE, max_chunk_count=MAX_CHUNK_COUNT)
 
-
-# ─── Utility: Call IONOS /predictions endpoint ─────────────────────────────────
-async def _call_ionos_llm(model: str, prompt: str, rag: list[str]) -> str:
-    llm = ChatOpenAI(
-        model=model,
-        base_url="https://openai.inference.de-txl.ionos.com/v1",
-        api_key=SecretStr(IONOS_API_KEY),
-        temperature=0.8,
-        max_tokens=500,
-    )
-
-    rag_message = SystemMessage(
-        content="Information obtained from the website:\n" + "\n".join(rag)
-    )
-    user_message = HumanMessage(content=prompt)
-
-    chat_log.append(rag_message)
-    chat_log.append(user_message)
-
-    logger.debug(
-        "Full prompt to LLM:\n%s", "\n".join(message.content for message in chat_log)
-    )
-
-    response = await llm.ainvoke(chat_log)
-
-    chat_log.append(AIMessage(content=response.content))
-
-    return response.content.strip()
 
 
 @app.post("/init")
@@ -128,15 +104,17 @@ async def init_index(
     req: NewChatRequest,
 ):
     """
-    Rebuild the RAG index from scratch using the URL passed in the request body.
+    Initialize the chatbot with a URL and build RAG index from scraped content.
     """
-    global chunk_texts, tfidf_matrix, chat_log
+    global chunk_texts, tfidf_matrix, chat_log, current_url
 
-    # 1) Scrape the URL that the front end sent using WebScraper
-    logger.info("Re-building RAG index using URL: %s", req.page_url)
-    
+    # 1) Set the current URL context
+    current_url = req.page_url.strip()
+    logger.info("Initializing RAG index using URL: %s", current_url)
+
+    # 2) Scrape the website using WebScraper
     try:
-        chunk_texts = await web_scraper.scrape_website(req.page_url)
+        chunk_texts = await web_scraper.scrape_website(current_url)
     except HTTPException:
         # Re-raise HTTPExceptions as they are already properly formatted
         raise
@@ -144,19 +122,23 @@ async def init_index(
         logger.error("Unexpected error during web scraping: %s", exc)
         raise HTTPException(status_code=500, detail=f"Web scraping error: {exc}")
 
-    # 2) Fit TF-IDF (even if chunk_texts is empty, fit on [""] to avoid None)
+    # 3) Build TF-IDF index
     if chunk_texts:
         tfidf_matrix = vectorizer.fit_transform(chunk_texts)
         logger.info("Built TF-IDF matrix with %d chunks", len(chunk_texts))
     else:
         tfidf_matrix = vectorizer.fit_transform([""])
-        logger.warning(
-            "Built TF-IDF on empty text, matrix shape=%s", tfidf_matrix.shape
-        )
+        logger.warning("Built TF-IDF on empty text, matrix shape=%s", tfidf_matrix.shape)
 
-    # 3) Whenever you re‐init the RAG index, you probably want to clear previous chat history:
+    # 4) Reset chat history
     chat_log = get_initial_chat()
-    return {"status": "RAG initialized", "num_chunks": len(chunk_texts)}
+    
+    return {
+        "status": "RAG index initialized", 
+        "url": current_url,
+        "num_chunks": len(chunk_texts),
+        "message": f"Successfully scraped and indexed {len(chunk_texts)} chunks from {current_url}"
+    }
 
 
 # ─── Chat endpoints ─────────────────────────────────────────────────────
@@ -168,30 +150,58 @@ async def get_chat_logs():
 
 @app.post("/")
 async def chat(request: Request, user_input: UserMessage):
-    global chat_log
+    global chat_log, react_agent, current_url
 
     # 1) Log prompt
     logger.info("Received chat POST; prompt=%s", user_input.prompt)
 
-    # 2) RAG retrieval (unchanged) …
+    # 2) Get the model identifier from headers
+    model_id = request.headers.get("x-model-id")
+    if not model_id:
+        raise HTTPException(status_code=400, detail="Missing x-model-id header")
+
+    # 3) Retrieve relevant chunks using RAG
     top_chunks = []
     if chunk_texts and tfidf_matrix is not None:
         user_vec = vectorizer.transform([user_input.prompt])
         sims = cosine_similarity(user_vec, tfidf_matrix).flatten()
         best_idxs = sims.argsort()[::-1][:RAG_K]
         top_chunks = [chunk_texts[i] for i in best_idxs]
+        logger.info("Retrieved %d relevant chunks for query", len(top_chunks))
 
-    # 3) Pull the model identifier from headers
-    model_id = request.headers.get("x-model-id")
-    if not model_id:
-        raise HTTPException(status_code=400, detail="Missing x-model-id header")
+    # 4) Initialize ReAct agent if not already done
+    if react_agent is None:
+        logger.info("Initializing ReAct agent with model: %s", model_id)
+        react_agent = create_react_agent(
+            model_name=model_id,
+            api_key=IONOS_API_KEY,
+            base_url="https://openai.inference.de-txl.ionos.com/v1",
+            temperature=0.1,
+            max_tokens=1000,
+            chunk_size=CHUNK_SIZE,
+            max_chunk_count=MAX_CHUNK_COUNT
+        )
 
-    # 4) Call IONOS with the dynamic model_id
+    # 5) Process message through ReAct agent with RAG context
     try:
-        response_text = await _call_ionos_llm(model_id,user_input.prompt,top_chunks)
+        response_text = await react_agent.process_message_with_rag(
+            message=user_input.prompt,
+            rag_chunks=top_chunks,
+            current_url=current_url if current_url else None
+        )
+        
+        # Update chat log for consistency
+        user_message = HumanMessage(content=user_input.prompt)
+        ai_message = AIMessage(content=response_text)
+        chat_log.extend([user_message, ai_message])
+        
+        # Keep chat log manageable (last 20 messages)
+        if len(chat_log) > 20:
+            chat_log = chat_log[-20:]
+            
     except Exception as exc:
-        logger.error("LLM API error: %s", exc)
-        raise HTTPException(status_code=500, detail="LLM chat error")
+        logger.error("ReAct agent error: %s", exc)
+        raise HTTPException(status_code=500, detail="Agent processing error")
 
     return response_text
 
