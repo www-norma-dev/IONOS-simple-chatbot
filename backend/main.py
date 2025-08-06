@@ -1,8 +1,6 @@
 import os
 import logging
-import requests
 
-from bs4 import BeautifulSoup
 from langchain_core.messages import (
     SystemMessage,
     HumanMessage,
@@ -20,6 +18,7 @@ from pydantic import SecretStr, BaseModel
 from mangum import Mangum
 
 from typing import List
+from agents.Collectors import WebScraper
 
 # ─── Logging setup ───────────────────────────────────────────────────────
 logging.basicConfig(
@@ -91,6 +90,9 @@ vectorizer = TfidfVectorizer()
 chunk_texts: List[str] = []  # List[str]
 tfidf_matrix = None  # will become a sparse matrix after fitting
 
+# ─── WebScraper instance ────────────────────────────────────────────────
+web_scraper = WebScraper(chunk_size=CHUNK_SIZE, max_chunk_count=MAX_CHUNK_COUNT)
+
 
 # ─── Utility: Call IONOS /predictions endpoint ─────────────────────────────────
 async def _call_ionos_llm(model: str, prompt: str, rag: list[str]) -> str:
@@ -130,45 +132,19 @@ async def init_index(
     """
     global chunk_texts, tfidf_matrix, chat_log
 
-    # 1) Scrape the URL that the front end sent
-    page_url = req.page_url.strip()
-    if not page_url.lower().startswith(("http://", "https://")):
-        raise HTTPException(
-            status_code=400, detail="URL must start with http:// or https://"
-        )
-
-    logger.info("Re-building RAG index using URL: %s", page_url)
+    # 1) Scrape the URL that the front end sent using WebScraper
+    logger.info("Re-building RAG index using URL: %s", req.page_url)
+    
     try:
-        resp = requests.get(page_url, timeout=30)
-        resp.raise_for_status()
+        chunk_texts = await web_scraper.scrape_website(req.page_url)
+    except HTTPException:
+        # Re-raise HTTPExceptions as they are already properly formatted
+        raise
     except Exception as exc:
-        logger.error("Failed to GET %s: %s", page_url, exc)
-        raise HTTPException(status_code=500, detail=f"Could not fetch page: {exc}")
+        logger.error("Unexpected error during web scraping: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Web scraping error: {exc}")
 
-    soup = BeautifulSoup(resp.text, "html.parser")
-    paras = [p.get_text().strip() for p in soup.find_all("p") if p.get_text().strip()]
-    full_text = "\n".join(paras)
-
-    if not full_text.strip():
-        logger.warning("No text found at %s; RAG index will be empty", page_url)
-
-    # 2) Break into 500-character chunks:
-    raw_chunks: List[str] = []
-    for i in range(0, len(full_text), CHUNK_SIZE):
-        raw_chunks.append(full_text[i : i + CHUNK_SIZE])
-
-    # 3) Cap at MAX_CHUNKS
-    if len(raw_chunks) > MAX_CHUNK_COUNT:
-        logger.info(
-            "Truncating chunks from %d to %d (MAX_CHUNKS)",
-            len(raw_chunks),
-            MAX_CHUNK_COUNT,
-        )
-        raw_chunks = raw_chunks[:MAX_CHUNK_COUNT]
-
-    chunk_texts = raw_chunks
-
-    # 4) Fit TF-IDF (even if chunk_texts is empty, fit on [""] to avoid None)
+    # 2) Fit TF-IDF (even if chunk_texts is empty, fit on [""] to avoid None)
     if chunk_texts:
         tfidf_matrix = vectorizer.fit_transform(chunk_texts)
         logger.info("Built TF-IDF matrix with %d chunks", len(chunk_texts))
@@ -178,7 +154,7 @@ async def init_index(
             "Built TF-IDF on empty text, matrix shape=%s", tfidf_matrix.shape
         )
 
-    # 5) Whenever you re‐init the RAG index, you probably want to clear previous chat history:
+    # 3) Whenever you re‐init the RAG index, you probably want to clear previous chat history:
     chat_log = get_initial_chat()
     return {"status": "RAG initialized", "num_chunks": len(chunk_texts)}
 
