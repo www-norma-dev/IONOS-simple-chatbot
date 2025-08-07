@@ -7,43 +7,30 @@ from langchain_core.messages import (
     AIMessage,
     BaseMessage,
 )
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import SecretStr, BaseModel
 from mangum import Mangum
 
 from typing import List
-from agents.Collectors import WebScraper
 from agents import create_react_agent
+from utils import RAGInitializer, Config
+
+# ─── Configuration validation ────────────────────────────────────────────
+Config.validate()
 
 # ─── Logging setup ───────────────────────────────────────────────────────
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
+    level=getattr(logging, Config.LOG_LEVEL),
+    format=Config.LOG_FORMAT
 )
 logger = logging.getLogger("chatbot-server")
-
-# ─── Load environment variables from .env ────────────────────────────────
-load_dotenv()
-
-# ─── IONOS AI Model Hub config ──────────────────────────────────────────
-IONOS_API_KEY = os.getenv("IONOS_API_KEY", "")
-if not IONOS_API_KEY:
-    raise KeyError("IONOS_API_KEY not found in environment.")
-
-
-# ─── RAG configuration ───────────────────────────────────────────────────
-RAG_K = int(os.getenv("RAG_K", "3"))  # top-k chunks to retrieve
-CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))  # cap total number of 500-char chunks
-MAX_CHUNK_COUNT = int(os.getenv("MAX_CHUNK_COUNT", "256"))  # cap total number of chunks
 
 
 # ─── REQUEST MODELS ───────────────────────────────────────────────────
 class NewChatRequest(BaseModel):
-    page_url: str  # <-- the front‐end will send this
+    page_url: str  
 
 
 class UserMessage(BaseModel):
@@ -54,13 +41,9 @@ class UserMessage(BaseModel):
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 handler = Mangum(app)
 
-origins = [
-    "http://localhost:8000",
-    "http://localhost:3000",
-]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=Config.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["POST", "GET", "DELETE"],
     allow_headers=["*"],
@@ -72,9 +55,11 @@ chat_log: list[BaseMessage] = []
 current_url: str = ""  # Track the current URL being discussed
 
 # ─── RAG index state ────────────────────────────────────────────────────
-vectorizer = TfidfVectorizer()
 chunk_texts: List[str] = []  # List[str]
 tfidf_matrix = None  # will become a sparse matrix after fitting
+
+# ─── RAG Initializer ────────────────────────────────────────────────────
+rag_initializer = RAGInitializer(chunk_size=Config.CHUNK_SIZE, max_chunk_count=Config.MAX_CHUNK_COUNT)
 
 # ─── ReAct Agent ────────────────────────────────────────────────────────
 react_agent = None  # Will be initialized when needed
@@ -94,10 +79,6 @@ def get_initial_chat() -> list[BaseMessage]:
     ]
 
 
-# ─── WebScraper instance ────────────────────────────────────────────────
-web_scraper = WebScraper(chunk_size=CHUNK_SIZE, max_chunk_count=MAX_CHUNK_COUNT)
-
-
 
 @app.post("/init")
 async def init_index(
@@ -110,35 +91,22 @@ async def init_index(
 
     # 1) Set the current URL context
     current_url = req.page_url.strip()
-    logger.info("Initializing RAG index using URL: %s", current_url)
 
-    # 2) Scrape the website using WebScraper
+    # 2) Use RAGInitializer to scrape and build index
     try:
-        chunk_texts = await web_scraper.scrape_website(current_url)
+        chunk_texts, tfidf_matrix = await rag_initializer.initialize_rag_index(current_url)
     except HTTPException:
         # Re-raise HTTPExceptions as they are already properly formatted
         raise
     except Exception as exc:
-        logger.error("Unexpected error during web scraping: %s", exc)
-        raise HTTPException(status_code=500, detail=f"Web scraping error: {exc}")
+        logger.error("Unexpected error during RAG initialization: %s", exc)
+        raise HTTPException(status_code=500, detail=f"RAG initialization error: {exc}")
 
-    # 3) Build TF-IDF index
-    if chunk_texts:
-        tfidf_matrix = vectorizer.fit_transform(chunk_texts)
-        logger.info("Built TF-IDF matrix with %d chunks", len(chunk_texts))
-    else:
-        tfidf_matrix = vectorizer.fit_transform([""])
-        logger.warning("Built TF-IDF on empty text, matrix shape=%s", tfidf_matrix.shape)
-
-    # 4) Reset chat history
+    # 3) Reset chat history
     chat_log = get_initial_chat()
     
-    return {
-        "status": "RAG index initialized", 
-        "url": current_url,
-        "num_chunks": len(chunk_texts),
-        "message": f"Successfully scraped and indexed {len(chunk_texts)} chunks from {current_url}"
-    }
+    # 4) Return standardized result
+    return rag_initializer.get_initialization_result(current_url, len(chunk_texts))
 
 
 # ─── Chat endpoints ─────────────────────────────────────────────────────
@@ -163,23 +131,24 @@ async def chat(request: Request, user_input: UserMessage):
     # 3) Retrieve relevant chunks using RAG
     top_chunks = []
     if chunk_texts and tfidf_matrix is not None:
-        user_vec = vectorizer.transform([user_input.prompt])
-        sims = cosine_similarity(user_vec, tfidf_matrix).flatten()
-        best_idxs = sims.argsort()[::-1][:RAG_K]
-        top_chunks = [chunk_texts[i] for i in best_idxs]
-        logger.info("Retrieved %d relevant chunks for query", len(top_chunks))
+        top_chunks = rag_initializer.get_relevant_chunks(
+            query=user_input.prompt,
+            chunk_texts=chunk_texts,
+            tfidf_matrix=tfidf_matrix,
+            top_k=Config.RAG_K
+        )
 
     # 4) Initialize ReAct agent if not already done
     if react_agent is None:
         logger.info("Initializing ReAct agent with model: %s", model_id)
         react_agent = create_react_agent(
             model_name=model_id,
-            api_key=IONOS_API_KEY,
+            api_key=Config.IONOS_API_KEY,
             base_url="https://openai.inference.de-txl.ionos.com/v1",
             temperature=0.1,
             max_tokens=1000,
-            chunk_size=CHUNK_SIZE,
-            max_chunk_count=MAX_CHUNK_COUNT
+            chunk_size=Config.CHUNK_SIZE,
+            max_chunk_count=Config.MAX_CHUNK_COUNT
         )
 
     # 5) Process message through ReAct agent with RAG context

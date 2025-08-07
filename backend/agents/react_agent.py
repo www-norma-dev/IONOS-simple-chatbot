@@ -73,6 +73,9 @@ class ReActAgent:
         # Build the workflow graph
         self.workflow = self._build_workflow()
         self.app = self.workflow.compile()
+        self.app.get_graph(xray=False).draw_mermaid_png(
+                output_file_path="supervisor_agent_graph.png"
+        )
     
     def _build_workflow(self) -> StateGraph:
         """Build the LangGraph workflow for the ReAct agent."""
@@ -93,6 +96,7 @@ class ReActAgent:
         workflow.add_edge("context_preparation", "response_generation")
         workflow.add_edge("response_generation", END)
         
+
         return workflow
     
     async def _reasoning_node(self, state: AgentState) -> Dict[str, Any]:
