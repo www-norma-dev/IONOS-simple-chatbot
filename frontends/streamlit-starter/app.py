@@ -12,6 +12,7 @@ Features include:
 import streamlit as st
 import requests
 import time
+import os
 
 # Backend API configuration
 BACKEND_URL = "http://localhost:8000"
@@ -136,3 +137,4 @@ if send_btn and user_message.strip():
                 st.error(f"Failed: {resp.text}")
         except Exception as e:
             st.error(f"Error: {e}")
+

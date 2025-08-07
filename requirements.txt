@@ -1,0 +1,15 @@
+# Backend dependencies
+fastapi==0.115.12
+uvicorn[standard]>=0.22.0
+python-dotenv>=1.0.0
+httpx>=0.24.1
+numpy>=1.25.0
+unstructured>=0.7.0
+beautifulsoup4>=4.12.2
+scikit-learn>=1.4.0
+mangum>=0.17.0
+langchain-openai==0.3.19
+
+# Streamlit app dependencies
+streamlit>=1.32.0
+websocket-client>=1.6.0
