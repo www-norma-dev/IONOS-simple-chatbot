@@ -15,6 +15,7 @@ from langgraph.graph import StateGraph, END
 from pydantic import SecretStr
 
 from .Collectors import WebScraper
+from .nodes import ReasoningNode, ContextPreparationNode, ResponseGenerationNode
 
 logger = logging.getLogger("chatbot-server")
 
@@ -70,6 +71,11 @@ class ReActAgent:
             max_tokens=config.max_tokens,
         )
         
+        # Initialize node instances
+        self.reasoning_node = ReasoningNode(self.llm)
+        self.context_preparation_node = ContextPreparationNode()
+        self.response_generation_node = ResponseGenerationNode(self.llm)
+        
         # Build the workflow graph
         self.workflow = self._build_workflow()
         self.app = self.workflow.compile()
@@ -83,10 +89,10 @@ class ReActAgent:
         # Create the state graph
         workflow = StateGraph(AgentState)
         
-        # Add nodes
-        workflow.add_node("reasoning", self._reasoning_node)
-        workflow.add_node("context_preparation", self._context_preparation_node)
-        workflow.add_node("response_generation", self._response_generation_node)
+        # Add nodes with the node instances
+        workflow.add_node("reasoning", self.reasoning_node.execute)
+        workflow.add_node("context_preparation", self.context_preparation_node.execute)
+        workflow.add_node("response_generation", self.response_generation_node.execute)
         
         # Set entry point
         workflow.set_entry_point("reasoning")
@@ -98,118 +104,6 @@ class ReActAgent:
         
 
         return workflow
-    
-    async def _reasoning_node(self, state: AgentState) -> Dict[str, Any]:
-        """Node for reasoning about the user's query."""
-        logger.debug("Entering reasoning node")
-        
-        # Get the last user message
-        user_message = None
-        for msg in reversed(state["messages"]):
-            if isinstance(msg, HumanMessage):
-                user_message = msg.content
-                break
-        
-        if not user_message:
-            return {
-                "reasoning": "No user message found",
-                "next_action": "respond_directly"
-            }
-        
-        # Create reasoning prompt
-        reasoning_prompt = f"""
-You are an intelligent assistant with reasoning capabilities. Analyze the user's query and determine the best approach.
-
-Current context:
-- User message: "{user_message}"
-- Current URL: {state.get("current_url", "None")}
-- Available RAG chunks: {len(state.get("rag_chunks", []))} chunks
-
-Think step by step:
-1. What is the user asking for?
-2. Do I have sufficient information from the RAG chunks to answer?
-3. What's the best way to structure my response?
-4. Are there any specific aspects I should focus on?
-
-Provide your reasoning analysis:
-"""
-        
-        messages = [SystemMessage(content=reasoning_prompt)]
-        response = await self.llm.ainvoke(messages)
-        
-        reasoning_text = response.content
-        logger.debug(f"Reasoning: {reasoning_text}")
-        
-        return {
-            "reasoning": reasoning_text,
-            "next_action": "respond_directly"
-        }
-    
-    async def _context_preparation_node(self, state: AgentState) -> Dict[str, Any]:
-        """Node for preparing context from RAG chunks."""
-        logger.debug("Entering context preparation node")
-        
-        rag_chunks = state.get("rag_chunks", [])
-        current_url = state.get("current_url")
-        
-        # Prepare context from RAG chunks
-        context_parts = []
-        
-        if rag_chunks:
-            context_parts.append(f"Information from {current_url or 'the website'}:")
-            for i, chunk in enumerate(rag_chunks[:5]):  # Limit to first 5 chunks
-                context_parts.append(f"Chunk {i+1}: {chunk}")
-        else:
-            context_parts.append("No relevant information found in the knowledge base.")
-        
-        context = "\n".join(context_parts)
-        logger.debug(f"Prepared context with {len(rag_chunks)} chunks")
-        
-        return {"context": context}
-    
-    async def _response_generation_node(self, state: AgentState) -> Dict[str, Any]:
-        """Node for generating the final response."""
-        logger.debug("Entering response generation node")
-        
-        # Get the user's question
-        user_message = None
-        for msg in reversed(state["messages"]):
-            if isinstance(msg, HumanMessage):
-                user_message = msg.content
-                break
-        
-        context = state.get("context", "No context available.")
-        reasoning = state.get("reasoning", "")
-        
-        # Create response prompt
-        response_prompt = f"""
-You are a helpful assistant. Based on your reasoning and the available information, provide a comprehensive answer to the user's question.
-
-Your Reasoning:
-{reasoning}
-
-Available Information:
-{context}
-
-User Question: {user_message}
-
-Guidelines:
-1. Use the reasoning you provided to structure your response
-2. Base your answer on the available information
-3. Be helpful, accurate, and well-structured
-4. If information is insufficient, be honest about limitations
-5. Provide actionable insights when possible
-
-Response:
-"""
-        
-        messages = [SystemMessage(content=response_prompt)]
-        response = await self.llm.ainvoke(messages)
-        
-        # Create the AI message for the conversation
-        ai_message = AIMessage(content=response.content.strip())
-        
-        return {"messages": [ai_message]}
     
     async def process_message_with_rag(self, message: str, rag_chunks: List[str], current_url: Optional[str] = None) -> str:
         """
@@ -263,21 +157,6 @@ Response:
         # Currently, we primarily use process_message_with_rag
         return await self.process_message_with_rag(message, [], current_url)
     
-    def extend_workflow(self, node_name: str, node_function, connections: Dict[str, str] = None):
-        """
-        Extend the workflow with new nodes (for future extensibility).
-        
-        Args:
-            node_name: Name of the new node
-            node_function: Function to execute for this node
-            connections: Dictionary of connections {from_node: to_node}
-        """
-        # This is a placeholder for future extensibility
-        # In a production system, you'd rebuild the workflow with new nodes
-        logger.info(f"Workflow extension requested: {node_name}")
-        pass
-
-
 # Factory function for creating ReAct agent
 def create_react_agent(
     model_name: str,
