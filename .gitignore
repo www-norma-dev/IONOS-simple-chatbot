@@ -3,6 +3,7 @@ dependencies/
 .idea/
 __pycache__/
 .env
+.venv
 venv/
 backendvenv/
 node_modules/

@@ -1,0 +1,16 @@
+[project]
+name = "ionos-simple-chatbot"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4>=4.12.2",
+    "fastapi==0.115.12",
+    "httpx>=0.24.1",
+    "langchain-openai==0.3.19",
+    "mangum>=0.17.0",
+    "numpy>=1.25.0",
+    "python-dotenv>=1.0.0",
+    "scikit-learn>=1.4.0",
+    "unstructured>=0.7.0",
+    "uvicorn[standard]>=0.22.0",
+]
