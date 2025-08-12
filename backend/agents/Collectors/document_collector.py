@@ -6,8 +6,13 @@ from typing import Iterable, List, Optional
 import requests
 from fastapi import HTTPException
 
-from pdfminer.high_level import extract_text as pdf_extract_text  # type: ignore
-from docx import Document  # type: ignore
+from langchain_community.document_loaders import (
+    PyPDFLoader,
+    Docx2txtLoader,
+    TextLoader,
+    DirectoryLoader,
+)
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 logger = logging.getLogger("chatbot-server")
@@ -53,16 +58,16 @@ class DocumentCollector:
             try:
                 if self._is_url(source):
                     logger.info("Downloading document from URL: %s", source)
-                    text = self._extract_text_from_url(source)
+                    docs_texts = self._load_docs_from_url(source)
                 else:
-                    text = self._extract_text_from_path(source)
+                    docs_texts = self._load_docs_from_path(source)
 
-                if not text:
+                if not docs_texts:
                     logger.warning("No text extracted from source: %s", source)
                     continue
 
                 any_success = True
-                aggregated_chunks.extend(self._chunk_text(text))
+                aggregated_chunks.extend(self._split_and_chunk(docs_texts))
 
                 if len(aggregated_chunks) >= self.max_chunk_count:
                     logger.info(
@@ -140,42 +145,63 @@ class DocumentCollector:
         _, ext = os.path.splitext(file_path.lower())
         try:
             if ext == ".pdf":
-                return self._extract_text_from_pdf(file_path)
-            if ext == ".docx":
-                return self._extract_text_from_docx(file_path)
-            if ext == ".txt":
-                return self._extract_text_from_txt(file_path)
-        except HTTPException:
-            raise
+                docs = PyPDFLoader(file_path).load()
+            elif ext == ".docx":
+                docs = Docx2txtLoader(file_path).load()
+            elif ext == ".txt":
+                docs = TextLoader(file_path, autodetect_encoding=True).load()
+            else:
+                raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Failed to parse {file_path}: {exc}")
 
-        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
+        return "\n".join([d.page_content for d in docs]).strip()
 
-    @staticmethod
-    def _extract_text_from_pdf(file_path: str) -> str:
-        text = pdf_extract_text(file_path) or ""
-        return text.strip()
+    # New: loader-based API returning list of raw texts before splitting
+    def _load_docs_from_path(self, path: str) -> List[str]:
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail=f"Path not found: {path}")
 
-    @staticmethod
-    def _extract_text_from_docx(file_path: str) -> str:
-        doc = Document(file_path)
-        parts: List[str] = []
-        for paragraph in doc.paragraphs:
-            if paragraph.text and paragraph.text.strip():
-                parts.append(paragraph.text.strip())
-        # Include table text
-        for table in doc.tables:
-            for row in table.rows:
-                cells_text = [cell.text.strip() for cell in row.cells if cell.text and cell.text.strip()]
-                if cells_text:
-                    parts.append("\t".join(cells_text))
-        return "\n".join(parts).strip()
+        texts: List[str] = []
+        if os.path.isdir(path):
+            # Load supported files recursively
+            for pattern in ("**/*.pdf", "**/*.docx", "**/*.txt"):
+                try:
+                    loader = DirectoryLoader(path, glob=pattern, show_progress=False)
+                    docs = loader.load()
+                    texts.extend([d.page_content for d in docs if d.page_content])
+                except Exception as exc:
+                    logger.warning("Directory loading failed for %s: %s", pattern, exc)
+        else:
+            texts.append(self._extract_text_from_file(path))
+        return texts
 
-    @staticmethod
-    def _extract_text_from_txt(file_path: str) -> str:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.read().strip()
+    def _load_docs_from_url(self, url: str) -> List[str]:
+        # Only handle direct file URLs for supported types
+        lower = url.lower()
+        if lower.endswith(".pdf") or lower.endswith(".docx") or lower.endswith(".txt"):
+            content = self._extract_text_from_url(url)
+            return [content] if content else []
+        # Not a supported direct file URL
+        return []
+
+    def _split_and_chunk(self, raw_texts: List[str]) -> List[str]:
+        # Combine texts into Documents, then split
+        if not raw_texts:
+            return []
+        # Build pseudo documents for splitter
+        # The text splitter operates on strings via create_documents
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=max(0, min(200, self.chunk_size // 10)),
+        )
+        documents = splitter.create_documents(raw_texts)
+        # Now split again to ensure chunking constraints are respected per document
+        split_docs = splitter.split_documents(documents)
+        chunks = [d.page_content for d in split_docs if d.page_content and d.page_content.strip()]
+        if len(chunks) > self.max_chunk_count:
+            chunks = chunks[: self.max_chunk_count]
+        return chunks
 
     def _chunk_text(self, text: str) -> List[str]:
         if not text:

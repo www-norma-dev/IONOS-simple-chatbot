@@ -8,8 +8,10 @@ beautifulsoup4>=4.12.2
 scikit-learn>=1.4.0
 mangum>=0.17.0
 langchain-openai==0.3.19
-pdfminer.six>=20220524
-python-docx>=1.0.0
+langchain-community>=0.3.0
+langchain-text-splitters>=0.3.0
+pypdf>=4.0.0
+docx2txt>=0.8
 
 # Streamlit app dependencies
 streamlit>=1.32.0
