@@ -41,23 +41,30 @@ Current context:
 - User message: "{user_message}"
 - Current URL: {state.get("current_url", "None")}
 - Available RAG chunks: {len(state.get("rag_chunks", []))} chunks
+ - Available document sources: {len(state.get("doc_sources", []))} sources
 
 Think step by step:
 1. What is the user asking for?
 2. Do I have sufficient information from the RAG chunks to answer?
-3. What's the best way to structure my response?
-4. Are there any specific aspects I should focus on?
+3. If not, and if document sources are available, should I collect and use them?
+4. What's the best way to structure my response?
+5. Are there any specific aspects I should focus on?
 
 Provide your reasoning analysis:
 """
         
-        messages = [SystemMessage(content=reasoning_prompt)]
-        response = await self.llm.ainvoke(messages)
+        # Pass a single HumanMessage to the chat model (expected input type)
+        response = await self.llm.ainvoke([HumanMessage(content=reasoning_prompt)])
         
         reasoning_text = response.content
         logger.debug(f"Reasoning: {reasoning_text}")
         
+        # Simple heuristic: if there are no RAG chunks and we have doc sources, suggest collecting docs
+        next_action = "respond_directly"
+        if not state.get("rag_chunks") and state.get("doc_sources"):
+            next_action = "collect_documents"
+
         return {
             "reasoning": reasoning_text,
-            "next_action": "respond_directly"
+            "next_action": next_action,
         }
