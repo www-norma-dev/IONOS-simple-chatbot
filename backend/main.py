@@ -8,13 +8,12 @@ from langchain_core.messages import (
     BaseMessage,
 )
 
-from fastapi import FastAPI, HTTPException, Request, Security, UploadFile, File
+from fastapi import FastAPI, HTTPException, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import SecretStr, BaseModel
 from mangum import Mangum
 
 from typing import List
-import shutil
 from agents import create_react_agent
 from utils import RAGInitializer, Config
 
@@ -67,10 +66,6 @@ rag_initializer = RAGInitializer(chunk_size=Config.CHUNK_SIZE, max_chunk_count=C
 # ─── ReAct Agent ────────────────────────────────────────────────────────
 react_agent = None  # Will be initialized when needed
 
-# ─── Upload storage ─────────────────────────────────────────────────────
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(__file__), "uploaded_docs"))
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 
 def get_initial_chat() -> list[BaseMessage]:
     return [
@@ -114,51 +109,6 @@ async def init_index(
     
     # 4) Return standardized result
     return rag_initializer.get_initialization_result(current_url, len(chunk_texts))
-
-
-# ─── File upload endpoint ────────────────────────────────────────────────
-@app.post("/upload")
-async def upload(files: List[UploadFile] = File(...)):
-    """
-    Accept multiple files and store them server-side. Returns list of file paths
-    that can be used as `doc_sources` in chat requests.
-    """
-    if not files:
-        raise HTTPException(status_code=400, detail="No files uploaded")
-
-    allowed_exts = {".pdf", ".docx", ".txt"}
-    saved_paths: List[str] = []
-
-    for file in files:
-        original_name = file.filename or "uploaded"
-        ext = os.path.splitext(original_name)[1].lower()
-        if ext not in allowed_exts:
-            logger.warning("Skipping unsupported file type: %s", original_name)
-            continue
-
-        safe_name = original_name.replace("..", "").replace("/", "_").replace("\\", "_")
-        target_path = os.path.join(UPLOAD_DIR, safe_name)
-
-        # Ensure unique filename
-        base, extension = os.path.splitext(target_path)
-        idx = 1
-        while os.path.exists(target_path):
-            target_path = f"{base}_{idx}{extension}"
-            idx += 1
-
-        try:
-            with open(target_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-        finally:
-            await file.close()
-
-        saved_paths.append(target_path)
-
-    if not saved_paths:
-        raise HTTPException(status_code=400, detail="No supported files uploaded")
-
-    logger.info("Uploaded %d files", len(saved_paths))
-    return {"doc_sources": saved_paths}
 
 
 # ─── Chat endpoints ─────────────────────────────────────────────────────
