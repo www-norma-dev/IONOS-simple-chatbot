@@ -9,9 +9,52 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import type { GetStaticProps } from "next";
 import { JSX } from "react";
 
-export default function Home(): JSX.Element {
+type Props = {
+  stars: number | null;
+  contributors: number | null;
+};
+
+export const getStaticProps: GetStaticProps<Props> = async () => {
+  const repoApi = "https://api.github.com/repos/www-norma-dev/IONOS-simple-chatbot";
+  const contributorsApi =
+    "https://api.github.com/repos/www-norma-dev/IONOS-simple-chatbot/contributors?per_page=100&anon=1";
+
+  let stars: number | null = null;
+  let contributors: number | null = null;
+
+  try {
+    const [repoRes, contribRes] = await Promise.all([
+      fetch(repoApi, { headers: { Accept: "application/vnd.github+json" } }),
+      fetch(contributorsApi, { headers: { Accept: "application/vnd.github+json" } }),
+    ]);
+
+    if (repoRes.ok) {
+      const repoJson = await repoRes.json();
+      // stargazers_count is the star count
+      if (typeof repoJson?.stargazers_count === "number") {
+        stars = repoJson.stargazers_count;
+      }
+    }
+
+    if (contribRes.ok) {
+      const contribJson = (await contribRes.json()) as Array<unknown>;
+      if (Array.isArray(contribJson)) {
+        contributors = contribJson.length;
+      }
+    }
+  } catch {
+    // Fail silently and keep nulls so build doesn't fail
+  }
+
+  return {
+  props: { stars, contributors },
+  };
+};
+
+export default function Home({ stars, contributors }: Props): JSX.Element {
   const base = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
   return (
@@ -65,11 +108,11 @@ export default function Home(): JSX.Element {
           <div className="hidden sm:flex items-center space-x-4 text-sm text-gray-700">
             <div className="flex items-center space-x-1">
               <Star className="h-4 w-4 text-yellow-500" />
-              <span>5</span>
+              <span aria-label="GitHub stars">{stars ?? "—"}</span>
             </div>
             <div className="flex items-center space-x-1">
               <Users className="h-4 w-4 text-green-500" />
-              <span>18</span>
+              <span aria-label="Contributors">{contributors ?? "—"}</span>
             </div>
           </div>
           <Link
