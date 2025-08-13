@@ -149,8 +149,8 @@ export default function Home({ stars, contributors }: Props): JSX.Element {
                   </span>
                 </h1>
                 <p className="text-xl lg:text-2xl text-gray-700 leading-relaxed font-medium  max-w-2xl">
-                  Plug into Norma’s infrastructure and the IONOS AI Models Hub
-                  to launch a production‑ready RAG chatbot with TF‑IDF indexing,
+                  Plug into the IONOS AI Models Hub and Norma’s AI evaluation 
+                  to launch a production‑ready Agents,
                   LangChain integration, and scalable best practices baked in.
                 </p>
               </div>
