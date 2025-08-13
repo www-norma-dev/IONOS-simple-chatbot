@@ -62,4 +62,9 @@ Guidelines:
             content = "I could not complete the answer generation at this time."
 
         ai_message = AIMessage(content=content)
+        try:
+            import logging as _logging
+            _logging.getLogger("chatbot-server").info("Emit: citations=%d", len(citations))
+        except Exception:
+            pass
         return {"messages": [ai_message], "final_answer": content}

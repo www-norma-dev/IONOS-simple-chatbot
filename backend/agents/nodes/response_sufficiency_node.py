@@ -73,6 +73,7 @@ class ResponseSufficiencyNode:
             decision = "insufficient"
             deficits = {"reason": "borderline"}
 
+        logger.info("Sufficiency decision: %s", decision)
         return {
             "decision": decision,
             "deficits": deficits,

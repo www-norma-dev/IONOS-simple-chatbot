@@ -20,11 +20,13 @@ from .nodes import (
     ResponseGenerationNode,
     ResponseDraftNode,
     ResponseSufficiencyNode,
-    SearchPlannerNode,
-    WebSearchNode,
-    WebReadExtractNode,
-    EvidenceRankerNode,
-    ContextMergeNode,
+    # Keep robust chain available but not required for starter
+    # SearchPlannerNode,
+    # WebSearchNode,
+    # WebReadExtractNode,
+    # EvidenceRankerNode,
+    # ContextMergeNode,
+    WebRetrieveSimpleNode,
 )
 from utils.config import Config
 
@@ -98,11 +100,8 @@ class ReActAgent:
         # Extended nodes (no separate finalize; use unified response_generation_node)
         self.response_draft_node = ResponseDraftNode(self.llm)
         self.response_sufficiency_node = ResponseSufficiencyNode()
-        self.search_planner_node = SearchPlannerNode()
-        self.web_search_node = WebSearchNode()
-        self.web_read_extract_node = WebReadExtractNode()
-        self.evidence_ranker_node = EvidenceRankerNode()
-        self.context_merge_node = ContextMergeNode()
+        # Minimal web retrieval for starter pack
+        self.web_retrieve_simple_node = WebRetrieveSimpleNode(k=4)
         
         # legacy workflow graph(Legacy: Reasoning → ContextPreparation → ResponseGeneration → END)
         self.workflow = self._build_workflow()
@@ -157,11 +156,7 @@ class ReActAgent:
         workflow.add_node("context_preparation", self.context_preparation_node.execute)
         workflow.add_node("response_draft", self.response_draft_node.execute)
         workflow.add_node("response_sufficiency", self.response_sufficiency_node.execute)
-        workflow.add_node("search_planner", self.search_planner_node.execute)
-        workflow.add_node("web_search", self.web_search_node.execute)
-        workflow.add_node("web_read_extract", self.web_read_extract_node.execute)
-        workflow.add_node("evidence_ranker", self.evidence_ranker_node.execute)
-        workflow.add_node("context_merge", self.context_merge_node.execute)
+        workflow.add_node("web_retrieve_simple", self.web_retrieve_simple_node.execute)
         workflow.add_node("response_generation", self.response_generation_node.execute)
 
         workflow.set_entry_point("reasoning")
@@ -180,18 +175,14 @@ class ReActAgent:
                 route_after_sufficiency,
                 {
                     "sufficient": "response_generation",
-                    "insufficient": "search_planner",
+                    "insufficient": "web_retrieve_simple",
                 },
             )
         except Exception:
             # Fallback: linearize to insufficient path; sufficiency node should decide minimal work
-            workflow.add_edge("response_sufficiency", "search_planner")
+            workflow.add_edge("response_sufficiency", "web_retrieve_simple")
 
-        workflow.add_edge("search_planner", "web_search")
-        workflow.add_edge("web_search", "web_read_extract")
-        workflow.add_edge("web_read_extract", "evidence_ranker")
-        workflow.add_edge("evidence_ranker", "context_merge")
-        workflow.add_edge("context_merge", "response_generation")
+        workflow.add_edge("web_retrieve_simple", "response_generation")
         workflow.add_edge("response_generation", END)
 
         # Also ensure sufficient path can end
@@ -254,10 +245,6 @@ class ReActAgent:
                     "url": current_url,
                 })
 
-            # Budgets and thresholds from config
-            ext_cfg = Config.get_extended_retrieval_config()
-            budgets = ext_cfg.get("budgets", {})
-
             initial_state = AgentState(
                 messages=[HumanMessage(content=message)],
                 current_url=current_url,
@@ -266,16 +253,14 @@ class ReActAgent:
                 next_action=None,
                 context="",
                 local_passages=local_passages,
-                budgets=budgets,
             )
 
             final_state = await self.extended_app.ainvoke(initial_state)
+            web_used = bool((final_state.get("citations") or []))
             logger.info(
-                "Extended flow: completed; local_passages=%d, web_results=%d, web_passages=%d, ranked=%d",
+                "Extended flow: completed; local_passages=%d, web_used=%s",
                 len(final_state.get("local_passages", []) or []),
-                len(final_state.get("web_results", []) or []),
-                len(final_state.get("web_passages", []) or []),
-                len(final_state.get("ranked_passages", []) or []),
+                web_used,
             )
 
             # Prefer explicit final_answer if present
