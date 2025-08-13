@@ -14,8 +14,19 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from pydantic import SecretStr
 
-from .Collectors import WebScraper
-from .nodes import ReasoningNode, ContextPreparationNode, ResponseGenerationNode
+from .nodes import (
+    ReasoningNode,
+    ContextPreparationNode,
+    ResponseGenerationNode,
+    ResponseDraftNode,
+    ResponseSufficiencyNode,
+    SearchPlannerNode,
+    WebSearchNode,
+    WebReadExtractNode,
+    EvidenceRankerNode,
+    ContextMergeNode,
+)
+from utils.config import Config
 
 logger = logging.getLogger("chatbot-server")
 
@@ -25,7 +36,7 @@ def add_messages(left: List[BaseMessage], right: List[BaseMessage]) -> List[Base
     return left + right
 
 
-class AgentState(TypedDict):
+class AgentState(TypedDict, total=False):
     """State of the ReAct agent."""
     messages: Annotated[List[BaseMessage], add_messages]
     current_url: Optional[str]
@@ -33,6 +44,20 @@ class AgentState(TypedDict):
     reasoning: str
     next_action: Optional[str]
     context: str
+    # Extended workflow fields (optional)
+    local_passages: List[Dict[str, Any]]
+    web_results: List[Dict[str, Any]]
+    web_passages: List[Dict[str, Any]]
+    ranked_passages: List[Dict[str, Any]]
+    draft_answer: str
+    final_answer: str
+    citations: List[Dict[str, Any]]
+    deficits: Dict[str, Any]
+    budgets: Dict[str, Any]
+    decision: str
+    # Planner/search fields
+    queries: List[str]
+    search_filters: Dict[str, Any]
 
 
 @dataclass
@@ -57,11 +82,6 @@ class ReActAgent:
     
     def __init__(self, config: ReActConfig):
         self.config = config
-        self.web_scraper = WebScraper(
-            chunk_size=config.chunk_size,
-            max_chunk_count=config.max_chunk_count
-        )
-        
         # Initialize LLM
         self.llm = ChatOpenAI(
             model=config.model_name,
@@ -75,13 +95,36 @@ class ReActAgent:
         self.reasoning_node = ReasoningNode(self.llm)
         self.context_preparation_node = ContextPreparationNode()
         self.response_generation_node = ResponseGenerationNode(self.llm)
+        # Extended nodes (no separate finalize; use unified response_generation_node)
+        self.response_draft_node = ResponseDraftNode(self.llm)
+        self.response_sufficiency_node = ResponseSufficiencyNode()
+        self.search_planner_node = SearchPlannerNode()
+        self.web_search_node = WebSearchNode()
+        self.web_read_extract_node = WebReadExtractNode()
+        self.evidence_ranker_node = EvidenceRankerNode()
+        self.context_merge_node = ContextMergeNode()
         
-        # Build the workflow graph
+        # legacy workflow graph(Legacy: Reasoning → ContextPreparation → ResponseGeneration → END)
         self.workflow = self._build_workflow()
         self.app = self.workflow.compile()
-        self.app.get_graph(xray=False).draw_mermaid_png(
-                output_file_path="supervisor_agent_graph.png"
-        )
+        if Config.GRAPH_RENDER_ENABLED:
+            try:
+                self.app.get_graph(xray=False).draw_mermaid_png(
+                    output_file_path="supervisor_agent_graph.png"
+                )
+            except Exception:
+                logger.debug("Graph rendering disabled or failed for legacy graph")
+
+        # Build the extended workflow graph
+        self.extended_workflow = self._build_extended_workflow()
+        self.extended_app = self.extended_workflow.compile()
+        if Config.GRAPH_RENDER_ENABLED:
+            try:
+                self.extended_app.get_graph(xray=False).draw_mermaid_png(
+                    output_file_path="supervisor_agent_graph_extended.png"
+                )
+            except Exception:
+                logger.debug("Graph rendering disabled or failed for extended graph")
     
     def _build_workflow(self) -> StateGraph:
         """Build the LangGraph workflow for the ReAct agent."""
@@ -102,6 +145,57 @@ class ReActAgent:
         workflow.add_edge("context_preparation", "response_generation")
         workflow.add_edge("response_generation", END)
         
+
+        return workflow
+
+    def _build_extended_workflow(self) -> StateGraph:
+        """Build the extended LangGraph workflow with gated web search."""
+        workflow = StateGraph(AgentState)
+
+        # Reuse existing nodes then extend
+        workflow.add_node("reasoning", self.reasoning_node.execute)
+        workflow.add_node("context_preparation", self.context_preparation_node.execute)
+        workflow.add_node("response_draft", self.response_draft_node.execute)
+        workflow.add_node("response_sufficiency", self.response_sufficiency_node.execute)
+        workflow.add_node("search_planner", self.search_planner_node.execute)
+        workflow.add_node("web_search", self.web_search_node.execute)
+        workflow.add_node("web_read_extract", self.web_read_extract_node.execute)
+        workflow.add_node("evidence_ranker", self.evidence_ranker_node.execute)
+        workflow.add_node("context_merge", self.context_merge_node.execute)
+        workflow.add_node("response_generation", self.response_generation_node.execute)
+
+        workflow.set_entry_point("reasoning")
+        workflow.add_edge("reasoning", "context_preparation")
+        workflow.add_edge("context_preparation", "response_draft")
+        workflow.add_edge("response_draft", "response_sufficiency")
+
+        # Conditional branch after sufficiency gate
+        def route_after_sufficiency(state: Dict[str, Any]) -> str:
+            decision = state.get("decision")
+            return decision if decision in ("sufficient", "insufficient") else "insufficient"
+
+        try:
+            workflow.add_conditional_edges(
+                "response_sufficiency",
+                route_after_sufficiency,
+                {
+                    "sufficient": "response_generation",
+                    "insufficient": "search_planner",
+                },
+            )
+        except Exception:
+            # Fallback: linearize to insufficient path; sufficiency node should decide minimal work
+            workflow.add_edge("response_sufficiency", "search_planner")
+
+        workflow.add_edge("search_planner", "web_search")
+        workflow.add_edge("web_search", "web_read_extract")
+        workflow.add_edge("web_read_extract", "evidence_ranker")
+        workflow.add_edge("evidence_ranker", "context_merge")
+        workflow.add_edge("context_merge", "response_generation")
+        workflow.add_edge("response_generation", END)
+
+        # Also ensure sufficient path can end
+        workflow.add_edge("response_generation", END)
 
         return workflow
     
@@ -140,6 +234,64 @@ class ReActAgent:
             
         except Exception as e:
             logger.error(f"Error in LangGraph workflow: {str(e)}")
+            return f"I apologize, but I encountered an error while processing your request: {str(e)}"
+
+    async def process_message_extended_with_rag(self, message: str, rag_chunks: List[str], current_url: Optional[str] = None) -> str:
+        """Process a user message using the extended workflow with gated web search.
+
+        Builds additional state (local_passages, budgets, etc.) and runs the
+        extended graph. Falls back gracefully on errors.
+        """
+        try:
+            logger.info("Extended flow: starting with %d rag_chunks", 0 if rag_chunks is None else len(rag_chunks))
+            # Map rag_chunks to local_passages with stub scores and metadata
+            local_passages: List[Dict[str, Any]] = []
+            for chunk in rag_chunks or []:
+                local_passages.append({
+                    "text": chunk,
+                    "score": 0.0,
+                    "source": "local",
+                    "url": current_url,
+                })
+
+            # Budgets and thresholds from config
+            ext_cfg = Config.get_extended_retrieval_config()
+            budgets = ext_cfg.get("budgets", {})
+
+            initial_state = AgentState(
+                messages=[HumanMessage(content=message)],
+                current_url=current_url,
+                rag_chunks=rag_chunks,
+                reasoning="",
+                next_action=None,
+                context="",
+                local_passages=local_passages,
+                budgets=budgets,
+            )
+
+            final_state = await self.extended_app.ainvoke(initial_state)
+            logger.info(
+                "Extended flow: completed; local_passages=%d, web_results=%d, web_passages=%d, ranked=%d",
+                len(final_state.get("local_passages", []) or []),
+                len(final_state.get("web_results", []) or []),
+                len(final_state.get("web_passages", []) or []),
+                len(final_state.get("ranked_passages", []) or []),
+            )
+
+            # Prefer explicit final_answer if present
+            final_answer = final_state.get("final_answer")
+            if isinstance(final_answer, str) and final_answer.strip():
+                return final_answer
+
+            # Otherwise, return the last AI message content
+            for msg in reversed(final_state.get("messages", [])):
+                if isinstance(msg, AIMessage):
+                    return msg.content
+
+            return "I apologize, but I couldn't generate a response."
+
+        except Exception as e:
+            logger.error(f"Error in extended LangGraph workflow: {str(e)}")
             return f"I apologize, but I encountered an error while processing your request: {str(e)}"
     
     async def process_message(self, message: str, current_url: Optional[str] = None) -> str:

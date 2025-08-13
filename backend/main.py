@@ -153,11 +153,24 @@ async def chat(request: Request, user_input: UserMessage):
 
     # 5) Process message through ReAct agent with RAG context
     try:
-        response_text = await react_agent.process_message_with_rag(
-            message=user_input.prompt,
-            rag_chunks=top_chunks,
-            current_url=current_url if current_url else None
-        )
+        agent_mode = request.headers.get("x-agent-mode", "").lower()
+        # Default to extended when feature flag is enabled; allow explicit legacy override via header
+        use_extended = bool(getattr(Config, "EXTENDED_RETRIEVAL_ENABLED", False)) and agent_mode != "legacy"
+        logger.info("Agent mode selection: extended_enabled=%s, header='%s', using_extended=%s",
+                    getattr(Config, "EXTENDED_RETRIEVAL_ENABLED", False), agent_mode, use_extended)
+
+        if use_extended and hasattr(react_agent, "process_message_extended_with_rag"):
+            response_text = await react_agent.process_message_extended_with_rag(
+                message=user_input.prompt,
+                rag_chunks=top_chunks,
+                current_url=current_url if current_url else None,
+            )
+        else:
+            response_text = await react_agent.process_message_with_rag(
+                message=user_input.prompt,
+                rag_chunks=top_chunks,
+                current_url=current_url if current_url else None,
+            )
         
         # Update chat log for consistency
         user_message = HumanMessage(content=user_input.prompt)

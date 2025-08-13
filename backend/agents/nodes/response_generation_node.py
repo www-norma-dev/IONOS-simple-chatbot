@@ -1,5 +1,9 @@
 """
-Response generation node for ReAct Agent workflow.
+Unified response emitter for both legacy and extended workflows.
+
+Generates a plain-language, grounded answer based on the current state.
+If citations are present (web-enriched), it naturally references sources;
+otherwise it emits a local-only answer.
 """
 
 import logging
@@ -11,51 +15,51 @@ logger = logging.getLogger("chatbot-server")
 
 
 class ResponseGenerationNode:
-    """Node for generating the final response."""
-    
+    """Single emitter node for legacy and extended flows."""
+
     def __init__(self, llm):
         self.llm = llm
-    
+
     async def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute the response generation node logic."""
-        logger.debug("Entering response generation node")
-        
-        # Get the user's question
+        """Synthesize and emit the final answer."""
+        logger.debug("Entering unified response generation node")
+
+        # Extract user question
         user_message = None
-        for msg in reversed(state["messages"]):
+        for msg in reversed(state.get("messages", []) or []):
             if isinstance(msg, HumanMessage):
                 user_message = msg.content
                 break
-        
-        context = state.get("context", "No context available.")
+
+        context = state.get("context", "")
+        citations = state.get("citations", []) or []
         reasoning = state.get("reasoning", "")
-        
-        # Create response prompt
+
+        # Build a non-technical prompt that adapts to presence of citations
+        citation_hint = "\n- Where relevant, mention sources by site name or title." if citations else ""
         response_prompt = f"""
-You are a helpful assistant. Based on your reasoning and the available information, provide a comprehensive answer to the user's question.
+You are a helpful assistant. Answer in plain, user-friendly language.
+Avoid technical terms like 'chunks', 'RAG', or 'retrieval'.{citation_hint}
 
-Your Reasoning:
-{reasoning}
-
-Available Information:
+Context:
 {context}
 
-User Question: {user_message}
+Question: {user_message}
 
 Guidelines:
-1. Use the reasoning you provided to structure your response
-2. Base your answer on the available information
-3. Be helpful, accurate, and well-structured
-4. If information is insufficient, be honest about limitations
-5. Provide actionable insights when possible
-
-Response:
+- Be concise, clear, and non-technical.
+- Base your answer on the provided context.
+- If you couldn't find the requested source or article, say so and suggest where to look.
 """
-        
+
         messages = [SystemMessage(content=response_prompt)]
-        response = await self.llm.ainvoke(messages)
-        
-        # Create the AI message for the conversation
-        ai_message = AIMessage(content=response.content.strip())
-        
-        return {"messages": [ai_message]}
+        try:
+            response = await self.llm.ainvoke(messages)
+            content = (response.content or "").strip()
+            if not content:
+                content = "I could not complete the answer generation at this time."
+        except Exception:
+            content = "I could not complete the answer generation at this time."
+
+        ai_message = AIMessage(content=content)
+        return {"messages": [ai_message], "final_answer": content}

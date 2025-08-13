@@ -8,3 +8,5 @@ beautifulsoup4>=4.12.2
 scikit-learn>=1.4.0
 mangum>=0.17.0
 langchain-openai==0.3.19
+langgraph>=0.2.0
+duckduckgo-search>=6.3.7

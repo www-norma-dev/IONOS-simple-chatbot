@@ -13,4 +13,5 @@ dependencies = [
     "scikit-learn>=1.4.0",
     "unstructured>=0.7.0",
     "uvicorn[standard]>=0.22.0",
+    "langgraph>=0.2.0",
 ]
