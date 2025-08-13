@@ -1,13 +1,10 @@
 """
-ReAct Agent implementation using LangGraph for extensible agent architecture.
+Minimal agent implementation using LangGraph.
 """
 
-import json
 import logging
 from typing import Dict, List, Any, Optional, TypedDict, Annotated
 from dataclasses import dataclass
-from functools import reduce
-from operator import add
 
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -15,18 +12,8 @@ from langgraph.graph import StateGraph, END
 from pydantic import SecretStr
 
 from .nodes import (
-    ReasoningNode,
-    ContextPreparationNode,
     ResponseGenerationNode,
-    ResponseDraftNode,
-    ResponseSufficiencyNode,
-    # Keep robust chain available but not required for starter
-    # SearchPlannerNode,
-    # WebSearchNode,
-    # WebReadExtractNode,
-    # EvidenceRankerNode,
-    # ContextMergeNode,
-    WebRetrieveSimpleNode,
+    PrepareAndDecideNode,
 )
 from utils.config import Config
 
@@ -34,7 +21,6 @@ logger = logging.getLogger("chatbot-server")
 
 
 def add_messages(left: List[BaseMessage], right: List[BaseMessage]) -> List[BaseMessage]:
-    """Add messages function for state management."""
     return left + right
 
 
@@ -46,20 +32,9 @@ class AgentState(TypedDict, total=False):
     reasoning: str
     next_action: Optional[str]
     context: str
-    # Extended workflow fields (optional)
+    # Minimal extended fields
     local_passages: List[Dict[str, Any]]
-    web_results: List[Dict[str, Any]]
-    web_passages: List[Dict[str, Any]]
-    ranked_passages: List[Dict[str, Any]]
-    draft_answer: str
-    final_answer: str
     citations: List[Dict[str, Any]]
-    deficits: Dict[str, Any]
-    budgets: Dict[str, Any]
-    decision: str
-    # Planner/search fields
-    queries: List[str]
-    search_filters: Dict[str, Any]
 
 
 @dataclass
@@ -93,15 +68,9 @@ class ReActAgent:
             max_tokens=config.max_tokens,
         )
         
-        # Initialize node instances
-        self.reasoning_node = ReasoningNode(self.llm)
-        self.context_preparation_node = ContextPreparationNode()
+        # Initialize node instances (minimal prepare+gate → emit)
         self.response_generation_node = ResponseGenerationNode(self.llm)
-        # Extended nodes (no separate finalize; use unified response_generation_node)
-        self.response_draft_node = ResponseDraftNode(self.llm)
-        self.response_sufficiency_node = ResponseSufficiencyNode()
-        # Minimal web retrieval for starter pack
-        self.web_retrieve_simple_node = WebRetrieveSimpleNode(k=4)
+        self.prepare_and_decide_node = PrepareAndDecideNode(llm=self.llm)
         
         # legacy workflow graph(Legacy: Reasoning → ContextPreparation → ResponseGeneration → END)
         self.workflow = self._build_workflow()
@@ -126,22 +95,13 @@ class ReActAgent:
                 logger.debug("Graph rendering disabled or failed for extended graph")
     
     def _build_workflow(self) -> StateGraph:
-        """Build the LangGraph workflow for the ReAct agent."""
-        
-        # Create the state graph
+        """Build the minimal legacy workflow: prepare → emit."""
+
         workflow = StateGraph(AgentState)
-        
-        # Add nodes with the node instances
-        workflow.add_node("reasoning", self.reasoning_node.execute)
-        workflow.add_node("context_preparation", self.context_preparation_node.execute)
+        workflow.add_node("prepare_and_decide", self.prepare_and_decide_node.execute)
         workflow.add_node("response_generation", self.response_generation_node.execute)
-        
-        # Set entry point
-        workflow.set_entry_point("reasoning")
-        
-        # Add edges
-        workflow.add_edge("reasoning", "context_preparation")
-        workflow.add_edge("context_preparation", "response_generation")
+        workflow.set_entry_point("prepare_and_decide")
+        workflow.add_edge("prepare_and_decide", "response_generation")
         workflow.add_edge("response_generation", END)
         
 
@@ -151,41 +111,12 @@ class ReActAgent:
         """Build the extended LangGraph workflow with gated web search."""
         workflow = StateGraph(AgentState)
 
-        # Reuse existing nodes then extend
-        workflow.add_node("reasoning", self.reasoning_node.execute)
-        workflow.add_node("context_preparation", self.context_preparation_node.execute)
-        workflow.add_node("response_draft", self.response_draft_node.execute)
-        workflow.add_node("response_sufficiency", self.response_sufficiency_node.execute)
-        workflow.add_node("web_retrieve_simple", self.web_retrieve_simple_node.execute)
+        # Single prepare+decide, then emit
+        workflow.add_node("prepare_and_decide", self.prepare_and_decide_node.execute)
         workflow.add_node("response_generation", self.response_generation_node.execute)
 
-        workflow.set_entry_point("reasoning")
-        workflow.add_edge("reasoning", "context_preparation")
-        workflow.add_edge("context_preparation", "response_draft")
-        workflow.add_edge("response_draft", "response_sufficiency")
-
-        # Conditional branch after sufficiency gate
-        def route_after_sufficiency(state: Dict[str, Any]) -> str:
-            decision = state.get("decision")
-            return decision if decision in ("sufficient", "insufficient") else "insufficient"
-
-        try:
-            workflow.add_conditional_edges(
-                "response_sufficiency",
-                route_after_sufficiency,
-                {
-                    "sufficient": "response_generation",
-                    "insufficient": "web_retrieve_simple",
-                },
-            )
-        except Exception:
-            # Fallback: linearize to insufficient path; sufficiency node should decide minimal work
-            workflow.add_edge("response_sufficiency", "web_retrieve_simple")
-
-        workflow.add_edge("web_retrieve_simple", "response_generation")
-        workflow.add_edge("response_generation", END)
-
-        # Also ensure sufficient path can end
+        workflow.set_entry_point("prepare_and_decide")
+        workflow.add_edge("prepare_and_decide", "response_generation")
         workflow.add_edge("response_generation", END)
 
         return workflow

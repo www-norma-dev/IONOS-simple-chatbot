@@ -28,7 +28,7 @@ class Config:
     
     # Feature flags
     EXTENDED_RETRIEVAL_ENABLED = os.getenv("EXTENDED_RETRIEVAL_ENABLED", "false").lower() == "true"
-    BOOSTER_MODE_ENABLED = os.getenv("BOOSTER_MODE_ENABLED", "false").lower() == "true"
+    ENABLE_REACT_JUDGER = os.getenv("ENABLE_REACT_JUDGER", "false").lower() == "true"
     GRAPH_RENDER_ENABLED = os.getenv("GRAPH_RENDER_ENABLED", "false").lower() == "true"
     
     # CORS configuration
