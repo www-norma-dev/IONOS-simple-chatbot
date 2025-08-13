@@ -1,0 +1,17 @@
+fastapi==0.115.12
+uvicorn[standard]>=0.22.0
+python-dotenv>=1.0.0
+httpx>=0.24.1
+numpy>=1.25.0
+beautifulsoup4>=4.12.2
+scikit-learn>=1.4.0
+mangum>=0.17.0
+langgraph>=0.2.0
+langchain-openai==0.3.19
+langchain-community>=0.3.0
+langchain-text-splitters>=0.3.0
+pypdf>=4.0.0
+docx2txt>=0.8
+streamlit>=1.32.0
+websocket-client>=1.6.0
+markdown>=3.5.0
