@@ -14,7 +14,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from pydantic import SecretStr
 
-from .Collectors import WebScraper
+from .Collectors import WebScraper, DocumentCollector
 from .nodes import ReasoningNode, ContextPreparationNode, ResponseGenerationNode
 
 logger = logging.getLogger("chatbot-server")
@@ -30,6 +30,7 @@ class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     current_url: Optional[str]
     rag_chunks: List[str]
+    doc_sources: List[str]
     reasoning: str
     next_action: Optional[str]
     context: str
@@ -61,6 +62,10 @@ class ReActAgent:
             chunk_size=config.chunk_size,
             max_chunk_count=config.max_chunk_count
         )
+        self.document_collector = DocumentCollector(
+            chunk_size=config.chunk_size,
+            max_chunk_count=config.max_chunk_count,
+        )
         
         # Initialize LLM
         self.llm = ChatOpenAI(
@@ -73,7 +78,7 @@ class ReActAgent:
         
         # Initialize node instances
         self.reasoning_node = ReasoningNode(self.llm)
-        self.context_preparation_node = ContextPreparationNode()
+        self.context_preparation_node = ContextPreparationNode(self.document_collector)
         self.response_generation_node = ResponseGenerationNode(self.llm)
         
         # Build the workflow graph
@@ -105,7 +110,7 @@ class ReActAgent:
 
         return workflow
     
-    async def process_message_with_rag(self, message: str, rag_chunks: List[str], current_url: Optional[str] = None) -> str:
+    async def process_message_with_rag(self, message: str, rag_chunks: List[str], current_url: Optional[str] = None, doc_sources: Optional[List[str]] = None) -> str:
         """
         Process a user message using pre-retrieved RAG chunks through the LangGraph workflow.
         
@@ -123,6 +128,7 @@ class ReActAgent:
                 messages=[HumanMessage(content=message)],
                 current_url=current_url,
                 rag_chunks=rag_chunks,
+                doc_sources=doc_sources or [],
                 reasoning="",
                 next_action=None,
                 context=""

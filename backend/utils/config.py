@@ -21,6 +21,7 @@ class Config:
     RAG_K = int(os.getenv("RAG_K", "3"))  # top-k chunks to retrieve
     CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))  # chunk size in characters
     MAX_CHUNK_COUNT = int(os.getenv("MAX_CHUNK_COUNT", "256"))  # max number of chunks
+    DOC_SOURCES = [s for s in os.getenv("DOC_SOURCES", "").split("|") if s.strip()]  # pipe-separated list of paths/URLs
     
     # Agent configuration
     DEFAULT_TEMPERATURE = 0.1

@@ -35,6 +35,8 @@ class NewChatRequest(BaseModel):
 
 class UserMessage(BaseModel):
     prompt: str
+    # Optional list of document sources (paths or URLs) for this request
+    doc_sources: list[str] | None = None
 
 
 # ─── FastAPI app setup ──────────────────────────────────────────────────
@@ -151,12 +153,17 @@ async def chat(request: Request, user_input: UserMessage):
             max_chunk_count=Config.MAX_CHUNK_COUNT
         )
 
-    # 5) Process message through ReAct agent with RAG context
+    # 5) Determine document sources
+    # Priority: request-specific doc_sources -> env-configured DOC_SOURCES -> none
+    doc_sources = user_input.doc_sources if user_input.doc_sources is not None else Config.DOC_SOURCES
+
+    # 6) Process message through ReAct agent with RAG context and potential doc sources
     try:
         response_text = await react_agent.process_message_with_rag(
             message=user_input.prompt,
             rag_chunks=top_chunks,
-            current_url=current_url if current_url else None
+            current_url=current_url if current_url else None,
+            doc_sources=doc_sources,
         )
         
         # Update chat log for consistency

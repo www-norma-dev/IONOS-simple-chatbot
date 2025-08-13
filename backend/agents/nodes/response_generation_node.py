@@ -5,7 +5,7 @@ Response generation node for ReAct Agent workflow.
 import logging
 from typing import Dict, Any
 
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage
 
 logger = logging.getLogger("chatbot-server")
 
@@ -52,8 +52,8 @@ Guidelines:
 Response:
 """
         
-        messages = [SystemMessage(content=response_prompt)]
-        response = await self.llm.ainvoke(messages)
+        # Pass a single HumanMessage to the chat model (expected input type)
+        response = await self.llm.ainvoke([HumanMessage(content=response_prompt)])
         
         # Create the AI message for the conversation
         ai_message = AIMessage(content=response.content.strip())
