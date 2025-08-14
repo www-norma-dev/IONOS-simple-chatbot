@@ -23,6 +23,11 @@ class Config:
     MAX_CHUNK_COUNT = int(os.getenv("MAX_CHUNK_COUNT", "256"))  # max number of chunks
     DOC_SOURCES = [s for s in os.getenv("DOC_SOURCES", "").split("|") if s.strip()]  # pipe-separated list of paths/URLs
     
+    # Web search configuration
+    TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
+    WEB_SEARCH_ENABLED = os.getenv("WEB_SEARCH_ENABLED", "false").lower() == "true"
+    WEB_SEARCH_MAX_RESULTS = int(os.getenv("WEB_SEARCH_MAX_RESULTS", "5"))
+    
     # Agent configuration
     DEFAULT_TEMPERATURE = 0.1
     DEFAULT_MAX_TOKENS = 1000

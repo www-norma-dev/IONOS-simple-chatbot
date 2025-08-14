@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import SecretStr, BaseModel
 from mangum import Mangum
 
-from typing import List
+from typing import List, Optional
 from agents import create_react_agent
 from utils import RAGInitializer, Config
 
@@ -36,7 +36,7 @@ class NewChatRequest(BaseModel):
 class UserMessage(BaseModel):
     prompt: str
     # Optional list of document sources (paths or URLs) for this request
-    doc_sources: list[str] | None = None
+    doc_sources: Optional[List[str]] = None
 
 
 # ─── FastAPI app setup ──────────────────────────────────────────────────
