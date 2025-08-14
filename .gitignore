@@ -7,3 +7,4 @@ __pycache__/
 venv/
 backendvenv/
 node_modules/
+supervisor_agent_graph.png
