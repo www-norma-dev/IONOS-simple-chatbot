@@ -4,7 +4,7 @@ Context preparation node for ReAct Agent workflow.
 
 import logging
 from typing import Dict, Any, List, Optional
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, filter_messages
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -44,12 +44,10 @@ class ContextPreparationNode:
         # Prepare context from RAG chunks
         context_parts = []
         
-        # Get user message for web search
-        user_text = ""
-        for msg in reversed(state.get("messages", [])):
-            if isinstance(msg, HumanMessage):
-                user_text = msg.content
-                break
+        # Get user message using LangChain's filter_messages
+        human_msgs = filter_messages(state["messages"], include_types=HumanMessage)
+        last_human = human_msgs[-1] if human_msgs else None
+        user_text = last_human.content if last_human else ""
         
         # Smart fallback: RAG first, then web search if irrelevant
         if rag_chunks and self._is_relevant(user_text, rag_chunks):
