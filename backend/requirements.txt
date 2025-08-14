@@ -10,6 +10,7 @@ langgraph>=0.2.0
 langchain-openai==0.3.19
 langchain-community>=0.3.0
 langchain-text-splitters>=0.3.0
+tavily-python>=0.3.0
 pypdf>=4.0.0
 docx2txt>=0.8
 streamlit>=1.32.0

@@ -14,7 +14,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from pydantic import SecretStr
 
-from .Collectors import WebScraper, DocumentCollector
+from .Collectors import WebScraper, DocumentCollector, WebSearchCollector
 from .nodes import ReasoningNode, ContextPreparationNode, ResponseGenerationNode
 
 logger = logging.getLogger("chatbot-server")
@@ -34,6 +34,7 @@ class AgentState(TypedDict):
     reasoning: str
     next_action: Optional[str]
     context: str
+    citations: List[Dict[str, Any]]  # Web search citations
 
 
 @dataclass
@@ -66,6 +67,9 @@ class ReActAgent:
             chunk_size=config.chunk_size,
             max_chunk_count=config.max_chunk_count,
         )
+        self.web_search_collector = WebSearchCollector(
+            max_results=getattr(config, 'web_search_max_results', 5)
+        )
         
         # Initialize LLM
         self.llm = ChatOpenAI(
@@ -78,7 +82,10 @@ class ReActAgent:
         
         # Initialize node instances
         self.reasoning_node = ReasoningNode(self.llm)
-        self.context_preparation_node = ContextPreparationNode(self.document_collector)
+        self.context_preparation_node = ContextPreparationNode(
+            document_collector=self.document_collector,
+            web_search_collector=self.web_search_collector
+        )
         self.response_generation_node = ResponseGenerationNode(self.llm)
         
         # Build the workflow graph
@@ -131,7 +138,8 @@ class ReActAgent:
                 doc_sources=doc_sources or [],
                 reasoning="",
                 next_action=None,
-                context=""
+                context="",
+                citations=[]
             )
             
             # Run the workflow

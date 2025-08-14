@@ -3,7 +3,10 @@ Context preparation node for ReAct Agent workflow.
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from langchain_core.messages import HumanMessage
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 logger = logging.getLogger("chatbot-server")
 
@@ -11,8 +14,23 @@ logger = logging.getLogger("chatbot-server")
 class ContextPreparationNode:
     """Node for preparing context from RAG chunks and optional document sources."""
 
-    def __init__(self, document_collector=None):
+    def __init__(self, document_collector=None, web_search_collector=None):
         self.document_collector = document_collector
+        self.web_search_collector = web_search_collector
+        
+    def _is_relevant(self, query: str, chunks: List[str], threshold: float = 0.1) -> bool:
+        """Simple similarity check to see if RAG chunks are relevant to query."""
+        if not chunks or not query.strip():
+            return False
+        try:
+            # Combine all chunks into one text
+            combined_text = " ".join(chunks[:3])  # Check first 3 chunks
+            vectorizer = TfidfVectorizer(stop_words='english')
+            vectors = vectorizer.fit_transform([query.lower(), combined_text.lower()])
+            similarity = cosine_similarity(vectors[0:1], vectors[1:2])[0][0]
+            return similarity > threshold
+        except:
+            return True  # If similarity check fails, assume relevant
 
     async def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the context preparation node logic."""
@@ -21,33 +39,47 @@ class ContextPreparationNode:
         rag_chunks = state.get("rag_chunks", [])
         current_url = state.get("current_url")
         doc_sources: List[str] = state.get("doc_sources", [])
-        next_action: str | None = state.get("next_action")
+        next_action: Optional[str] = state.get("next_action")
         
         # Prepare context from RAG chunks
         context_parts = []
         
-        # Use RAG chunks if available, otherwise attempt to collect from documents
-        if rag_chunks:
+        # Get user message for web search
+        user_text = ""
+        for msg in reversed(state.get("messages", [])):
+            if isinstance(msg, HumanMessage):
+                user_text = msg.content
+                break
+        
+        # Smart fallback: RAG first, then web search if irrelevant
+        if rag_chunks and self._is_relevant(user_text, rag_chunks):
+            # Use RAG chunks if they're relevant to the query
             context_parts.append(f"Information from {current_url or 'the website'}:")
-            for i, chunk in enumerate(rag_chunks[:5]):  # Limit to first 5 chunks
-                context_parts.append(f"Chunk {i+1}: {chunk}")
-        elif self.document_collector and doc_sources and (
-            next_action == "collect_documents" or not rag_chunks
-        ):
-            try:
-                doc_chunks = await self.document_collector.collect_documents(doc_sources)
-            except Exception as exc:
-                logger.error("Document collection failed: %s", exc)
-                doc_chunks = []
-
+            context_parts.extend(rag_chunks[:5])
+        elif self.web_search_collector:
+            # Fallback to web search when RAG is irrelevant or empty
+            web_chunks = await self.web_search_collector.collect_chunks_only(user_text)
+            if web_chunks:
+                context_parts.append("Information from web search:")
+                context_parts.extend(web_chunks[:5])
+            elif rag_chunks:
+                # Last resort: use irrelevant RAG chunks
+                context_parts.append(f"Information from {current_url or 'the website'} (may not be directly relevant):")
+                context_parts.extend(rag_chunks[:5])
+            else:
+                context_parts.append("No relevant information found.")
+        elif rag_chunks:
+            # Use RAG chunks if no web search available
+            context_parts.append(f"Information from {current_url or 'the website'}:")
+            context_parts.extend(rag_chunks[:5])
+        elif self.document_collector and doc_sources:
+            # Final fallback to documents
+            doc_chunks = await self.document_collector.collect_documents(doc_sources)
             if doc_chunks:
                 context_parts.append("Information from documents:")
-                for i, chunk in enumerate(doc_chunks[:5]):
-                    context_parts.append(f"Doc {i+1}: {chunk}")
+                context_parts.extend(doc_chunks[:5])
             else:
-                context_parts.append("No relevant information found in the knowledge base.")
-        else:
-            context_parts.append("No relevant information found in the knowledge base.")
+                context_parts.append("No relevant information found.")
         
         context = "\n".join(context_parts)
         logger.debug(f"Prepared context with {len(rag_chunks)} chunks")
