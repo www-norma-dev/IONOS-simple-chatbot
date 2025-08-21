@@ -2,20 +2,52 @@
 
 ## 1. Navigate to backend
 
-```bash
+```powershell
 cd backend
 ```
 
-## 2. Install dependencies
+## 2. Create a virtual environment (Windows PowerShell)
 
-```bash
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+## 3. Install dependencies
+
+```powershell
 pip install -r requirements.txt
 ```
 
-## 3. Run the server
+## 4. Set environment variables
 
-```bash
-python main.py
+```powershell
+$env:IONOS_API_KEY = "<your_ionos_api_key>"
+# Optional (if using web search):
+$env:TAVILY_API_KEY = "<your_tavily_api_key>"
+# Optional RAG tuning
+$env:RAG_K = "3"
+$env:CHUNK_SIZE = "500"
+$env:MAX_CHUNK_COUNT = "256"
+```
+
+Tip: You can also put these in a `.env` file.
+
+## 5. Run the server
+
+```powershell
+python .\main.py
 ```
 
 The API will be available at `http://localhost:8000`.
+
+## 6. Test the chat endpoint
+
+```powershell
+Invoke-RestMethod `
+	-Uri "http://127.0.0.1:8000/" `
+	-Method Post `
+	-Headers @{ "x-model-id" = "meta-llama/Llama-3.3-70B-Instruct" } `
+	-Body (@{ prompt = "Hello!" } | ConvertTo-Json) `
+	-ContentType "application/json"
+```

@@ -1,0 +1,39 @@
+---
+title: Troubleshooting
+---
+
+# Troubleshooting
+
+## USER_AGENT not set
+Set a default user agent before making web requests:
+
+```powershell
+$env:USER_AGENT = "IONOS-RAG-Chatbot/1.0"
+```
+
+## ImportError: attempted relative import with no known parent package
+Run the backend with absolute imports. In `backend/main.py` ensure:
+
+```python
+from chatbot_agent import create_chatbot_agent
+```
+
+And run from the backend folder:
+
+```powershell
+python .\main.py
+```
+
+## Missing x-model-id header
+Include `x-model-id` in requests to `/`.
+
+## 401/403 from model API
+- Verify `IONOS_API_KEY` is set and valid.
+- Confirm the model ID is available to your account.
+
+## Module not found (langchain_core, mangum)
+Install backend requirements inside your virtualenv:
+
+```powershell
+pip install -r requirements.txt
+```
