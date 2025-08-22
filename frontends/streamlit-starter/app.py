@@ -49,12 +49,22 @@ st.sidebar.markdown("---")
 
 # Model Selection Section
 st.sidebar.subheader("🤖 Model Selection")
-# Available LLaMA model options with different capabilities
-MODEL_OPTIONS = [
-    "meta-llama/Meta-Llama-3.1-8B-Instruct",      # Smaller, faster model
-    "meta-llama/Llama-3.3-70B-Instruct",          # Balanced performance
-    "meta-llama/Meta-Llama-3.1-405B-Instruct-FP8", # Largest, most capable model
-]
+
+@st.cache_data(ttl=300)
+def fetch_model_ids():
+    try:
+        resp = requests.get(
+            "https://openai.inference.de-txl.ionos.com/v1/models",
+            headers={"Authorization": f"Bearer {os.getenv('IONOS_API_KEY')}"}
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return [m["id"] for m in data.get("data", [])]  # models under "data"
+    except Exception as e:
+        st.sidebar.error(f"Error fetching models: {e}")
+        return []
+
+MODEL_OPTIONS = fetch_model_ids() or ["meta‑llama/Meta‑Llama‑3.1‑8B‑Instruct"]
 model = st.sidebar.selectbox("Model", MODEL_OPTIONS, key="model_select")
 
 st.sidebar.markdown("---")
