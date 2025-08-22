@@ -61,7 +61,7 @@ jobs:
 
       - name: Template Kubernetes manifest
         run: |
-          envsubst < kubernetes_config.yaml.tpl > kubernetes_config.yaml
+          envsubst < kubernetes_config.tpl > kubernetes_config.yaml
 
       - name: Validate Kubernetes manifest
         run: kubectl apply --dry-run=client -f kubernetes_config.yaml
