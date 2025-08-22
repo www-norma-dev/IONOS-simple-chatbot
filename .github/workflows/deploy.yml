@@ -2,14 +2,20 @@ name: Build and Deploy to IONOS K8s
 
 on:
   push:
-    branches: [main]
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
 
 env:
-  REGISTRY: YOUR_DOCKER_REPO  # e.g., docker.io/myusername or registry.example.com/yourproject
+  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY }}  # Use GitHub repository variable
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
+    env:
+      VERSION: ${{ github.ref_name }}
+      BACKEND_IMAGE: ${{ vars.IMAGE_REGISTRY }}/backend:${{ github.ref_name }}
+      FRONTEND_IMAGE: ${{ vars.IMAGE_REGISTRY }}/frontend:${{ github.ref_name }}
 
     steps:
       - name: Checkout code
@@ -20,17 +26,21 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-          registry: ${{ env.REGISTRY }}
+          registry: ${{ env.IMAGE_REGISTRY }}
 
       - name: Build and Push Backend Image
         run: |
-          docker build -t $REGISTRY/backend:latest -f ./backend/Dockerfile ./backend
-          docker push $REGISTRY/backend:latest
+          docker build -t $IMAGE_REGISTRY/backend:${VERSION} -f ./backend/Dockerfile ./backend
+          docker push $IMAGE_REGISTRY/backend:${VERSION}
+          docker tag $IMAGE_REGISTRY/backend:${VERSION} $IMAGE_REGISTRY/backend:latest
+          docker push $IMAGE_REGISTRY/backend:latest
 
-      - name: Build and Push Streamlit Image
+      - name: Build and Push Frontend Image
         run: |
-          docker build -t $REGISTRY/streamlit:latest -f ./streamlit/Dockerfile ./streamlit
-          docker push $REGISTRY/streamlit:latest
+          docker build -t $IMAGE_REGISTRY/frontend:${VERSION} -f ./frontends/streamlit-starter/Dockerfile ./frontends/streamlit-starter
+          docker push $IMAGE_REGISTRY/frontend:${VERSION}
+          docker tag $IMAGE_REGISTRY/frontend:${VERSION} $IMAGE_REGISTRY/frontend:latest
+          docker push $IMAGE_REGISTRY/frontend:latest
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
@@ -40,7 +50,27 @@ jobs:
       - name: Configure Kubeconfig
         run: |
           mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+
+      - name: Create secrets in Kubernetes
+        run: |
+          kubectl delete secret secrets --ignore-not-found
+          kubectl create secret generic secrets \
+            --from-literal=IONOS_API_KEY="${{ secrets.IONOS_API_KEY }}" \
+            --from-literal=TAVILY_API_KEY="${{ secrets.TAVILY_API_KEY }}"
+
+      - name: Template Kubernetes manifest
+        run: |
+          envsubst < kubernetes_config.yaml.tpl > kubernetes_config.yaml
+
+      - name: Validate Kubernetes manifest
+        run: kubectl apply --dry-run=client -f kubernetes_config.yaml
 
       - name: Deploy to Kubernetes
-        run: kubectl apply -f k8s-deployment.yaml
+        run: kubectl apply -f kubernetes_config.yaml
+
+      - name: Wait for Backend rollout
+        run: kubectl rollout status deployment/backend
+
+      - name: Wait for Streamlit rollout
+        run: kubectl rollout status deployment/streamlit
