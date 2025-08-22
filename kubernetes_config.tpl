@@ -16,7 +16,7 @@ spec:
         - name: regcred
       containers:
       - name: backend
-        image: chatbot-registry.cr.de-fra.ionos.com/starter-pack/backend:0.1
+        image: ${BACKEND_IMAGE}
         ports:
         - containerPort: 8000
         env:
@@ -61,7 +61,7 @@ spec:
         - name: regcred
       containers:
       - name: streamlit
-        image: chatbot-registry.cr.de-fra.ionos.com/starter-pack/frontend:0.1
+        image: ${FRONTEND_IMAGE}
         ports:
         - containerPort: 8501
 ---
