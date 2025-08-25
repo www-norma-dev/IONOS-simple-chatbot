@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  backend-service:
+    build: ./backend
+    image: backend:latest
+    networks:
+      - webnet
+    ports:
+      - "8000:8000"
+    environment:
+      - IONOS_API_KEY=${IONOS_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+
+  frontend-service:
+    build: ./frontends/streamlit-starter
+    image: frontend:latest
+    networks:
+      - webnet
+    ports:
+      - "8501:8501"
+
+networks:
+  webnet:
+    driver: bridge

@@ -18,7 +18,7 @@ from mangum import Mangum
 
 from typing import Optional
 
-from backend.chatbot_agent import create_chatbot_agent
+from chatbot_agent import create_chatbot_agent
 
 # ─── Logging setup ───────────────────────────────────────────────────────
 logging.basicConfig(
