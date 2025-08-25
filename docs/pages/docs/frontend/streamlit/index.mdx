@@ -1,0 +1,33 @@
+---
+title: Streamlit Overview
+---
+
+# Streamlit Frontend
+
+The Streamlit app provides a quick UI to:
+
+- Initialize RAG with a URL via the `/init` endpoint
+- Select a model ID to use for chat
+- Send messages to the backend and display responses
+
+## Run
+
+```powershell
+# In a new shell
+cd frontends/streamlit-starter
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt  # or: pip install streamlit requests
+streamlit run app.py
+```
+
+Ensure the backend is running on `http://localhost:8000`.
+
+## Configure
+
+- Backend URL is defined in the app as `BACKEND_URL = "http://localhost:8000"`
+- The model is passed in the `x-model-id` header
+
+## Notes
+
+- If `/init` is not available (backend variant without RAG), you can comment out the initialization block in the sidebar.

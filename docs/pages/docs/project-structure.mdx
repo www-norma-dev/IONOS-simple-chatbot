@@ -1,16 +1,38 @@
 # Project Structure
 
 ```text
-├── frontend             # Next.js app
-│   ├── .env
-│   ├── app/
-│   ├── components/
-│   ├── public/
-│   └── lib/
-├── backend              # FastAPI service
-│   ├── .env
-│   ├── main.py
-│   ├── requirements.txt
+IONOS-simple-chatbot/
+├─ backend/                         # FastAPI service + agent
+│  ├─ main.py                       # API entrypoint (GET/POST /)
+│  ├─ chatbot_agent.py              # LangGraph ReAct agent + tools
+│  ├─ requirements.txt
+│  └─ pyproject.toml
+│  
+│
+├─ frontends/
+│  ├─ next-js-starter/              # Next.js app (TypeScript)
+│  │  ├─ app/                       # App router pages/layout
+│  │  ├─ components/                # UI components
+│  │  ├─ lib/                       # Utilities
+│  │  └─ public/                    # Static assets
+│  └─ streamlit-starter/
+│     └─ app.py                     # Streamlit chat UI
+│
+├─ docs/                            # Nextra/Next.js documentation site
+│  ├─ pages/docs/                   # MDX documentation
+│  ├─ package.json
+│  └─ next.config.mjs
+│
+├─ assets/
+│  └─ images/                       # Repo images (cover.jpg, screenshot.png)
+│
+├─ README.md
+├─ LICENSE
+├─ CODE_OF_CONDUCT.md
+├─ pyproject.toml                    # Root Python project metadata (optional)
+└─ uv.lock                          # uv/poetry lockfile (if used)
 ```
 
-Each part is modular and easy to deploy.
+Notes
+- The backend can run standalone via `python backend/main.py`.
+- Frontends are optional; use either Next.js or Streamlit.

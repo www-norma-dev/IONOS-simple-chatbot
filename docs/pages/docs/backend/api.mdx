@@ -1,0 +1,37 @@
+---
+title: Backend API
+---
+
+# Backend API
+
+Base URL: `http://localhost:8000`
+
+## Headers
+- `x-model-id`: required. Example: `meta-llama/Llama-3.3-70B-Instruct`.
+
+## GET /
+Returns chat history as a list of LangChain messages.
+
+Response example:
+```json
+[
+  {"type": "system", "content": "..."},
+  {"type": "ai", "content": "Hello!"}
+]
+```
+
+## POST /
+Sends a user message. Body:
+```json
+{ "prompt": "Hello there" }
+```
+Requires header `x-model-id`.
+
+Response: plain text with the assistant's reply.
+
+## POST /init (if enabled)
+Initializes RAG index from a URL.
+```json
+{ "page_url": "https://example.com" }
+```
+Response: JSON with stats (e.g., chunk count).

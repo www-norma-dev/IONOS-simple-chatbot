@@ -1,0 +1,72 @@
+---
+title: Agent Tools
+---
+
+# Agent Tools
+
+This app uses a LangGraph ReAct agent with LangChain tools (defined in `backend/chatbot_agent.py`). Tools let the model call out to functions like search, APIs, or utilities.
+
+## What you get out-of-the-box
+- search_documents(query, context): looks up content in your local TF-IDF retriever when provided.
+- web_search(query): fetches web results via Tavily (requires TAVILY_API_KEY).
+
+Create the agent:
+```python
+from chatbot_agent import create_chatbot_agent
+agent = create_chatbot_agent(model_name="meta-llama/Llama-3.3-70B-Instruct")
+```
+
+## Tool contract (quick)
+- Input: a single string argument (query) is common; add more only if necessary.
+- Output: return a concise string (markdown allowed) that’s useful to the model.
+- Errors: catch exceptions and return a short error message; don’t raise raw tracebacks to the user.
+
+## Add a new tool (step‑by‑step)
+1) Define a function with a helpful docstring and decorate with `@tool`.
+2) Keep inputs simple (prefer a single `query: str`).
+3) Handle timeouts and exceptions; return a readable string on failure.
+4) Register the tool in `create_chatbot_agent` by adding it to the tools list.
+
+Example – a simple clock tool:
+```python
+from langchain_core.tools import tool
+
+@tool
+def get_current_time(_: str) -> str:
+    """Return the current UTC time in ISO 8601 format."""
+    import datetime
+    return datetime.datetime.utcnow().isoformat()
+
+# In create_chatbot_agent(...), include `get_current_time` in the tools list.
+```
+
+## Context-aware tools (retriever)
+`search_documents` expects a `Context` dataclass with a `TFIDFRetriever`:
+```python
+from dataclasses import dataclass
+from langchain_community.retrievers import TFIDFRetriever
+
+@dataclass
+class Context:
+    retriever: TFIDFRetriever
+
+# Build a simple retriever
+retriever = TFIDFRetriever.from_texts([
+    "This repository contains a RAG chatbot.",
+    "It uses a FastAPI backend and optional Streamlit / Next.js frontends.",
+])
+
+# Pass context when invoking the agent
+messages = [
+    {"type": "system", "content": "You are an assistant."},
+]
+result = agent.invoke({"messages": messages, "context": Context(retriever=retriever)})
+```
+If you don't pass a retriever context, `search_documents` won’t be used; the agent can still use `web_search` if enabled.
+
+## Best practices
+- Keep tool outputs short and factual; avoid speculation.
+- Validate and sanitize inputs (URLs, IDs).
+- Timeouts and retries: be defensive against slow or flaky APIs.
+- Don’t log secrets; read them from env (e.g., IONOS_API_KEY, TAVILY_API_KEY).
+- Cache where it helps (e.g., web results) to reduce latency and cost.
