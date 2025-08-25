@@ -7,8 +7,8 @@ title: Agent Tools
 This app uses a LangGraph ReAct agent with LangChain tools (defined in `backend/chatbot_agent.py`). Tools let the model call out to functions like search, APIs, or utilities.
 
 ## What you get out-of-the-box
-- search_documents(query, context): looks up content in your local TF-IDF retriever when provided.
-- web_search(query): fetches web results via Tavily (requires TAVILY_API_KEY).
+- `search_documents(query, config)`: looks up content in your local TF‑IDF retriever when provided via `RunnableConfig.configurable['retriever']`.
+- `web_search(query)`: fetches web results via Tavily (requires `TAVILY_API_KEY`).
 
 Create the agent:
 ```python
@@ -38,17 +38,19 @@ def get_current_time(_: str) -> str:
     return datetime.datetime.utcnow().isoformat()
 
 # In create_chatbot_agent(...), include `get_current_time` in the tools list.
+# Example: tools=[search_documents, web_search, get_current_time] in backend/chatbot_agent.py
 ```
 
-## Context-aware tools (retriever)
-`search_documents` expects a `Context` dataclass with a `TFIDFRetriever`:
-```python
-from dataclasses import dataclass
-from langchain_community.retrievers import TFIDFRetriever
 
-@dataclass
-class Context:
-    retriever: TFIDFRetriever
+
+## Context-aware tools (retriever)
+`search_documents` reads a `TFIDFRetriever` from the LangChain `RunnableConfig` you pass at call time.
+
+```python
+from langchain_community.retrievers import TFIDFRetriever
+from langchain_core.runnables import RunnableConfig
+from langgraph.prebuilt.chat_agent_executor import AgentStatePydantic
+from langchain_core.messages import HumanMessage
 
 # Build a simple retriever
 retriever = TFIDFRetriever.from_texts([
@@ -56,13 +58,16 @@ retriever = TFIDFRetriever.from_texts([
     "It uses a FastAPI backend and optional Streamlit / Next.js frontends.",
 ])
 
-# Pass context when invoking the agent
-messages = [
-    {"type": "system", "content": "You are an assistant."},
-]
-result = agent.invoke({"messages": messages, "context": Context(retriever=retriever)})
+# Initial conversational state
+state = AgentStatePydantic(messages=[HumanMessage(content="Summarize the repo in 2 bullets.")])
+
+# Invoke the agent with retriever bound in config
+result = agent.invoke(
+    input=state,
+    config=RunnableConfig(configurable={"retriever": retriever}),
+)
 ```
-If you don't pass a retriever context, `search_documents` won’t be used; the agent can still use `web_search` if enabled.
+If you don't pass a retriever in `config.configurable`, `search_documents` won’t run; the agent can still use `web_search` if enabled.
 
 ## Best practices
 - Keep tool outputs short and factual; avoid speculation.

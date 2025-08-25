@@ -6,11 +6,20 @@
 cd backend
 ```
 
-## 2. Create a virtual environment (Windows PowerShell)
+## 2. Create a virtual environment and activate it
+
+### a) Windows (PowerShell)
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+```
+
+### b) macOS / Linux (bash/zsh)
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
 ## 3. Install dependencies
@@ -43,6 +52,10 @@ The API will be available at `http://localhost:8000`.
 
 ## 6. Test the chat endpoint
 
+Run these from another terminal:
+
+### a) Windows (PowerShell)
+
 ```powershell
 Invoke-RestMethod `
 	-Uri "http://127.0.0.1:8000/" `
@@ -50,4 +63,13 @@ Invoke-RestMethod `
 	-Headers @{ "x-model-id" = "meta-llama/Llama-3.3-70B-Instruct" } `
 	-Body (@{ prompt = "Hello!" } | ConvertTo-Json) `
 	-ContentType "application/json"
+```
+
+### b) macOS / Linux (bash/zsh)
+
+```bash
+curl -s -X POST "http://127.0.0.1:8000/" \
+  -H "x-model-id: meta-llama/Llama-3.3-70B-Instruct" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Hello!"}'
 ```
