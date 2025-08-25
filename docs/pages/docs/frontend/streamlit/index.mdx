@@ -12,11 +12,24 @@ The Streamlit app provides a quick UI to:
 
 ## Run
 
+### a) Windows (PowerShell)
+
 ```powershell
 # In a new shell
 cd frontends/streamlit-starter
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt  # or: pip install streamlit requests
+streamlit run app.py
+```
+
+### b) macOS / Linux (bash/zsh)
+
+```bash
+# In a new shell
+cd frontends/streamlit-starter
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt  # or: pip install streamlit requests
 streamlit run app.py
 ```
