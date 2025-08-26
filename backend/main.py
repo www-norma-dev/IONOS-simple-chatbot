@@ -73,7 +73,7 @@ async def get_chat_logs():
 async def chat(request: Request):
     data = await request.json()
     messages = data.get("messages", [])
-    logger.info(f"Received chat POST; messages={messages}")
+    logger.info(f"Injecting messages into agent state: {messages}")
     model_id = request.headers.get("x-model-id")
     logger.info(f"Received x-model-id header: {model_id}")
     if not model_id:
@@ -86,6 +86,11 @@ async def chat(request: Request):
             state_messages.append(HumanMessage(content=m["content"]))
         elif m["type"] == "ai":
             state_messages.append(AIMessage(content=m["content"]))
+        elif m["type"] == "tool":
+            state_messages.append({"type": "tool", "name": m.get("name", "tool"), "content": m["content"]})
+        else:
+            state_messages.append(m)
+        logger.info(f"Injecting messages into agent state: {messages}")
     state = AgentStatePydantic(messages=state_messages)
     try:
         result = agent.invoke(input=state, config=RunnableConfig())

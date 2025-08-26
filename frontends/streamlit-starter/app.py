@@ -99,8 +99,26 @@ if send_btn and user_message.strip():
                 headers={"x-model-id": model},
             )
             if resp.ok:
-                # Add AI response to chat history
-                st.session_state["chat_history"].append({"type": "ai", "content": resp.json()["content"] if resp.headers.get('content-type','').startswith('application/json') else resp.text})
+                # Parse backend response
+                data = resp.json() if resp.headers.get('content-type','').startswith('application/json') else {"type": "ai", "content": resp.text}
+                # If the response is a list of messages, append all
+                if isinstance(data, list):
+                    for msg in data:
+                        st.session_state["chat_history"].append(msg)
+                # If the response is a single message
+                elif isinstance(data, dict):
+                    # Handle tool messages
+                    if data.get("type") == "tool":
+                        st.session_state["chat_history"].append({
+                            "type": "tool",
+                            "name": data.get("name", "tool"),
+                            "content": data.get("content", "")
+                        })
+                    else:
+                        st.session_state["chat_history"].append({
+                            "type": data.get("type", "ai"),
+                            "content": data.get("content", "")
+                        })
                 st.rerun()  # Refresh UI to show new messages
             else:
                 st.error(f"Failed: {resp.text}")
