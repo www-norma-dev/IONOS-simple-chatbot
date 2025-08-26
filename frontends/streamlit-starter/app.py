@@ -14,11 +14,16 @@ import requests
 import time
 import os
 from dotenv import load_dotenv
+import uuid
 
 load_dotenv()
 
 # Backend API configuration
 BACKEND_URL = "http://localhost:8000"
+
+# UUID for session tracking
+if "user_id" not in st.session_state:
+    st.session_state["user_id"] = str(uuid.uuid4())
 
 # Configure Streamlit page settings
 st.set_page_config(page_title="IONOS Chatbot", page_icon="💬", layout="wide")
@@ -79,7 +84,13 @@ st.title("IONOS Chatbot 🗨️")
 if "chat_history" not in st.session_state:
     try:
         # Fetch existing chat history from backend
-        resp = requests.get(f"{BACKEND_URL}/", headers={"x-model-id": st.session_state.get("model_select", MODEL_OPTIONS[0] if MODEL_OPTIONS else "")})
+        resp = requests.get(
+            f"{BACKEND_URL}/",
+            headers={
+                "x-model-id": st.session_state.get("model_select", MODEL_OPTIONS[0] if MODEL_OPTIONS else ""),
+                "x-user-id": st.session_state["user_id"]
+            }
+        )
         if resp.ok:
             st.session_state["chat_history"] = resp.json()
         else:
@@ -127,7 +138,10 @@ if send_btn and user_message.strip():
             resp = requests.post(
                 f"{BACKEND_URL}/",
                 json={"prompt": user_message},
-                headers={"x-model-id": st.session_state.get("model_select", MODEL_OPTIONS[0] if MODEL_OPTIONS else "")},
+                headers={
+                    "x-model-id": st.session_state.get("model_select", MODEL_OPTIONS[0] if MODEL_OPTIONS else ""),
+                    "x-user-id": st.session_state["user_id"]
+                },
             )
             if resp.ok:
                 # Add AI response to chat history
@@ -135,7 +149,13 @@ if send_btn and user_message.strip():
                 
                 # Attempt to sync with backend chat history
                 try:
-                    hist_resp = requests.get(f"{BACKEND_URL}/", headers={"x-model-id": st.session_state.get("model_select", MODEL_OPTIONS[0] if MODEL_OPTIONS else "")})
+                    hist_resp = requests.get(
+                        f"{BACKEND_URL}/",
+                        headers={
+                            "x-model-id": st.session_state.get("model_select", MODEL_OPTIONS[0] if MODEL_OPTIONS else ""),
+                            "x-user-id": st.session_state["user_id"]
+                        }
+                    )
                     if hist_resp.ok:
                         backend_history = hist_resp.json()
                         # Update local history if backend has more recent messages
