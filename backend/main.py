@@ -1,7 +1,6 @@
 import logging
 
-from langchain_community.document_loaders import WebBaseLoader
-from langchain_community.retrievers import TFIDFRetriever
+ 
 from langchain_core.messages import (
     HumanMessage,
     AIMessage, filter_messages,
@@ -10,7 +9,7 @@ from langchain_core.messages import (
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.runnables import RunnableConfig
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+ 
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt.chat_agent_executor import AgentStatePydantic
 from pydantic import BaseModel
@@ -18,7 +17,7 @@ from mangum import Mangum
 
 from typing import Optional
 
-from backend.chatbot_agent import create_chatbot_agent
+from chatbot_agent import create_chatbot_agent
 
 # ─── Logging setup ───────────────────────────────────────────────────────
 logging.basicConfig(
@@ -57,7 +56,7 @@ app.add_middleware(
 
 agent: Optional[CompiledStateGraph] = None
 state: AgentStatePydantic = AgentStatePydantic(messages=[])
-retriever: Optional[TFIDFRetriever] = None
+ 
 
 
 def reset_chatbot(model_name):
@@ -71,27 +70,6 @@ def reset_chatbot(model_name):
     )])
 
 
-@app.post("/init")
-async def init_index(
-        req: NewChatRequest,
-):
-    global retriever
-
-    url = req.page_url.strip()
-    loader = WebBaseLoader(url)
-    docs = loader.load()
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-    chunks = splitter.split_documents(docs)
-    retriever = TFIDFRetriever.from_documents(chunks)
-
-    return {
-        "status": "RAG index initialized",
-        "url": url,
-        "num_chunks": len(chunks),
-        "message": f"Successfully scraped and indexed {len(chunks),} chunks from {url}"
-    }
-
-
 # ─── Chat endpoints ─────────────────────────────────────────────────────
 @app.get("/")
 async def get_chat_logs():
@@ -100,35 +78,34 @@ async def get_chat_logs():
 
 
 @app.post("/")
-async def chat(request: Request, user_input: UserMessage):
+async def chat(request: Request):
     global agent, state
-
-    # 1) Log prompt
-    logger.info("Received chat POST; prompt=%s", user_input.prompt)
-
-    # 2) Get the model identifier from headers
+    data = await request.json()
+    messages = data.get("messages", [])
+    logger.info(f"Received chat POST; messages={messages}")
     model_id = request.headers.get("x-model-id")
+    logger.info(f"Received x-model-id header: {model_id}")
     if not model_id:
         raise HTTPException(status_code=400, detail="Missing x-model-id header")
-
     # 4) Initialize ReAct agent if not already done
     if agent is None:
         logger.info("Initializing ReAct agent with model: %s", model_id)
         reset_chatbot(model_id)
-
     try:
-        state.messages += [HumanMessage(content=user_input.prompt)]
-        result = agent.invoke(input=state, config=RunnableConfig(configurable={'retriever': retriever}))
+        # Add all user messages from the messages list
+        for m in messages:
+            if m["type"] == "human":
+                state.messages.append(HumanMessage(content=m["content"]))
+            elif m["type"] == "ai":
+                state.messages.append(AIMessage(content=m["content"]))
+        result = agent.invoke(input=state, config=RunnableConfig())
         state = AgentStatePydantic.model_validate(result)
-
         # Keep chat log manageable (last 20 messages)
         if len(state.messages) > 20:
             state.messages = state.messages[-20:]
-
     except Exception as exc:
         logger.error("ReAct agent error: %s", exc)
         raise HTTPException(status_code=500, detail="Agent processing error")
-
     return state.messages[-1]
 
 
