@@ -15,7 +15,7 @@ import time
 import os
 from dotenv import load_dotenv
 
-load_dotenv()  # Load environment variables from .env file
+load_dotenv()
 
 # Backend API configuration
 BACKEND_URL = "http://localhost:8000"

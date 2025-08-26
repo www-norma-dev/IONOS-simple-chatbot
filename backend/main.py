@@ -54,32 +54,23 @@ app.add_middleware(
     max_age=3600,
 )
 
-agent: Optional[CompiledStateGraph] = None
-state: AgentStatePydantic = AgentStatePydantic(messages=[])
+
  
 
 
-def reset_chatbot(model_name):
-    global agent, state
-    agent = create_chatbot_agent(model_name)
-    state = AgentStatePydantic(messages=[AIMessage(
-        content=(
-            "Hello!\n\nI'm a personal assistant chatbot. "
-            "I will respond as best I can to any messages you send me."
-        )
-    )])
+
 
 
 # ─── Chat endpoints ─────────────────────────────────────────────────────
 @app.get("/")
 async def get_chat_logs():
     logger.info("Received GET /; returning chat_log")
-    return filter_messages(state.messages, exclude_tool_calls=True)
+    # No chat log stored on backend anymore
+    return []
 
 
 @app.post("/")
 async def chat(request: Request):
-    global agent, state
     data = await request.json()
     messages = data.get("messages", [])
     logger.info(f"Received chat POST; messages={messages}")
@@ -87,17 +78,16 @@ async def chat(request: Request):
     logger.info(f"Received x-model-id header: {model_id}")
     if not model_id:
         raise HTTPException(status_code=400, detail="Missing x-model-id header")
-    # 4) Initialize ReAct agent if not already done
-    if agent is None:
-        logger.info("Initializing ReAct agent with model: %s", model_id)
-        reset_chatbot(model_id)
+    # Create agent and state from scratch for each request
+    agent = create_chatbot_agent(model_id)
+    state_messages = []
+    for m in messages:
+        if m["type"] == "human":
+            state_messages.append(HumanMessage(content=m["content"]))
+        elif m["type"] == "ai":
+            state_messages.append(AIMessage(content=m["content"]))
+    state = AgentStatePydantic(messages=state_messages)
     try:
-        # Add all user messages from the messages list
-        for m in messages:
-            if m["type"] == "human":
-                state.messages.append(HumanMessage(content=m["content"]))
-            elif m["type"] == "ai":
-                state.messages.append(AIMessage(content=m["content"]))
         result = agent.invoke(input=state, config=RunnableConfig())
         state = AgentStatePydantic.model_validate(result)
         # Keep chat log manageable (last 20 messages)

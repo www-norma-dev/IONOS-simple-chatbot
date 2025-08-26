@@ -26,17 +26,6 @@ _prompt: str = ("You are an assistant. Your role is to answer user's question."
 
 
 @tool
-def search_documents(query: str, config: RunnableConfig) -> str:
-    """
-    First search your own documents to see if you have enough information.
-    """
-    logger.info(f"Searching scrapped web page for: {query}")
-    chunks = config["configurable"]["retriever"].invoke(query, k=8)
-    logger.info(chunks)
-    return "\n\n".join(chunk.page_content for chunk in chunks)
-
-
-@tool
 def web_search(query: str) -> str:
     """
     Do a web search to query additional information for the user.
@@ -56,4 +45,4 @@ def create_chatbot_agent(model_name: str) -> CompiledStateGraph:
         temperature=0,
         max_tokens=1024,
     )
-    return create_react_agent(model=llm, prompt=_prompt, tools=[search_documents, web_search], state_schema=AgentStatePydantic)
+    return create_react_agent(model=llm, prompt=_prompt, tools=[web_search], state_schema=AgentStatePydantic)
