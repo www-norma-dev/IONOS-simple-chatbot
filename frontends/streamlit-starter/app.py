@@ -13,6 +13,9 @@ import streamlit as st
 import requests
 import time
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Backend API configuration
 BACKEND_URL = "http://localhost:8000"
@@ -65,7 +68,7 @@ def fetch_model_ids():
         return []
 
 MODEL_OPTIONS = fetch_model_ids() or ["meta‑llama/Meta‑Llama‑3.1‑8B‑Instruct"]
-model = st.sidebar.selectbox("Model", MODEL_OPTIONS, key="model_select")
+st.sidebar.selectbox("Model", MODEL_OPTIONS, key="model_select")
 
 st.sidebar.markdown("---")
 
@@ -76,7 +79,7 @@ st.title("IONOS Chatbot 🗨️")
 if "chat_history" not in st.session_state:
     try:
         # Fetch existing chat history from backend
-        resp = requests.get(f"{BACKEND_URL}/", headers={"x-model-id": model})
+        resp = requests.get(f"{BACKEND_URL}/", headers={"x-model-id": st.session_state.get("model_select", MODEL_OPTIONS[0] if MODEL_OPTIONS else "")})
         if resp.ok:
             st.session_state["chat_history"] = resp.json()
         else:
@@ -124,7 +127,7 @@ if send_btn and user_message.strip():
             resp = requests.post(
                 f"{BACKEND_URL}/",
                 json={"prompt": user_message},
-                headers={"x-model-id": model},
+                headers={"x-model-id": st.session_state.get("model_select", MODEL_OPTIONS[0] if MODEL_OPTIONS else "")},
             )
             if resp.ok:
                 # Add AI response to chat history
@@ -132,7 +135,7 @@ if send_btn and user_message.strip():
                 
                 # Attempt to sync with backend chat history
                 try:
-                    hist_resp = requests.get(f"{BACKEND_URL}/", headers={"x-model-id": model})
+                    hist_resp = requests.get(f"{BACKEND_URL}/", headers={"x-model-id": st.session_state.get("model_select", MODEL_OPTIONS[0] if MODEL_OPTIONS else "")})
                     if hist_resp.ok:
                         backend_history = hist_resp.json()
                         # Update local history if backend has more recent messages
