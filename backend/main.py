@@ -18,7 +18,7 @@ from mangum import Mangum
 
 from typing import Optional
 
-from backend.chatbot_agent import create_chatbot_agent
+from chatbot_agent import create_chatbot_agent
 
 # ─── Logging setup ───────────────────────────────────────────────────────
 logging.basicConfig(
@@ -39,6 +39,7 @@ class UserMessage(BaseModel):
     doc_sources: list[str] | None = None
 
 
+
 # ─── FastAPI app setup ──────────────────────────────────────────────────
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 handler = Mangum(app)
@@ -55,13 +56,11 @@ app.add_middleware(
     max_age=3600,
 )
 
-agent: Optional[CompiledStateGraph] = None
-state: AgentStatePydantic = AgentStatePydantic(messages=[])
+# Per-user session storage
+user_sessions = {}
 retriever: Optional[TFIDFRetriever] = None
 
-
 def reset_chatbot(model_name):
-    global agent, state
     agent = create_chatbot_agent(model_name)
     state = AgentStatePydantic(messages=[AIMessage(
         content=(
@@ -69,6 +68,7 @@ def reset_chatbot(model_name):
             "I will respond as best I can to any messages you send me."
         )
     )])
+    return agent, state
 
 
 @app.post("/init")
@@ -93,33 +93,42 @@ async def init_index(
 
 
 # ─── Chat endpoints ─────────────────────────────────────────────────────
+
 @app.get("/")
-async def get_chat_logs():
-    logger.info("Received GET /; returning chat_log")
-    return filter_messages(state.messages, exclude_tool_calls=True)
+async def get_chat_logs(request: Request):
+    user_id = request.headers.get("x-user-id")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Missing x-user-id header")
+    session = user_sessions.get(user_id)
+    if session is None:
+        return []
+    return filter_messages(session["state"].messages, exclude_tool_calls=True)
+
 
 
 @app.post("/")
 async def chat(request: Request, user_input: UserMessage):
-    global agent, state
-
-    # 1) Log prompt
-    logger.info("Received chat POST; prompt=%s", user_input.prompt)
-
-    # 2) Get the model identifier from headers
+    user_id = request.headers.get("x-user-id")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Missing x-user-id header")
     model_id = request.headers.get("x-model-id")
     if not model_id:
         raise HTTPException(status_code=400, detail="Missing x-model-id header")
 
-    # 4) Initialize ReAct agent if not already done
-    if agent is None:
-        logger.info("Initializing ReAct agent with model: %s", model_id)
-        reset_chatbot(model_id)
+    # Get or create session for this user
+    session = user_sessions.get(user_id)
+    if session is None or session["model_id"] != model_id:
+        agent, state = reset_chatbot(model_id)
+        user_sessions[user_id] = {"agent": agent, "state": state, "model_id": model_id}
+    else:
+        agent = session["agent"]
+        state = session["state"]
 
     try:
         state.messages += [HumanMessage(content=user_input.prompt)]
         result = agent.invoke(input=state, config=RunnableConfig(configurable={'retriever': retriever}))
         state = AgentStatePydantic.model_validate(result)
+        user_sessions[user_id]["state"] = state
 
         # Keep chat log manageable (last 20 messages)
         if len(state.messages) > 20:
