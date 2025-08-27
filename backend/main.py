@@ -94,27 +94,11 @@ async def chat(request: Request):
         return state_messages
     state_messages = build_state_messages(messages)
     state = AgentStatePydantic(messages=state_messages)
-    try:
-        result = agent.invoke(input=state, config=RunnableConfig())
-        state = AgentStatePydantic.model_validate(result)
-        # Keep chat log manageable (last 20 messages)
-        if len(state.messages) > 20:
-            state.messages = state.messages[-20:]
-    except Exception as exc:
-        logger.error("ReAct agent error with tool messages: %s", exc)
-        # Fallback: try again with only human and ai messages
-        filtered = [m for m in messages if m["type"] in ("human", "ai")]
-        logger.info(f"Retrying with filtered messages: {filtered}")
-        state_messages = build_state_messages(filtered)
-        state = AgentStatePydantic(messages=state_messages)
-        try:
-            result = agent.invoke(input=state, config=RunnableConfig())
-            state = AgentStatePydantic.model_validate(result)
-            if len(state.messages) > 20:
-                state.messages = state.messages[-20:]
-        except Exception as exc2:
-            logger.error("ReAct agent error on fallback: %s", exc2)
-            raise HTTPException(status_code=500, detail="Agent processing error (fallback)")
+    result = agent.invoke(input=state, config=RunnableConfig())
+    state = AgentStatePydantic.model_validate(result)
+    # Keep chat log manageable (last 20 messages)
+    if len(state.messages) > 20:
+        state.messages = state.messages[-20:]
     return state.messages[-1]
 
 
