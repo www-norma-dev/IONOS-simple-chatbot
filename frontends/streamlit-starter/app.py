@@ -8,9 +8,13 @@ Features include:
 - Interactive chat interface with message history
 - Real-time communication with FastAPI backend
 """
+import os
 
 import streamlit as st
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Backend API configuration
 BACKEND_URL = "http://backend-service:8000"
@@ -93,7 +97,7 @@ with chat_container:
             st.markdown(
                 f"<div style='text-align:right; background:#4F8EF7; color:white; padding:10px; "
                 f"border-radius:10px; margin:5px 0 5px 30%;'>"
-                f"<b>🧑‍💻 You:</b> {msg['content']}</div>", 
+                f"<b>🧑‍💻 You:</b> {msg['content']}</div>",
                 unsafe_allow_html=True
             )
         elif msg["type"] == "ai":
@@ -101,7 +105,7 @@ with chat_container:
             st.markdown(
                 f"<div style='text-align:left; background:#FFD166; color:#222; padding:10px; "
                 f"border-radius:10px; margin:5px 30% 5px 0;'>"
-                f"<b>🤖 Bot:</b> {msg['content']}</div>", 
+                f"<b>🤖 Bot:</b> {msg['content']}</div>",
                 unsafe_allow_html=True
             )
 
@@ -114,7 +118,7 @@ with st.form("chat_form", clear_on_submit=True):
 if send_btn and user_message.strip():
     # Add user message to chat history immediately for better UX
     st.session_state["chat_history"].append({"type": "human", "content": user_message})
-    
+
     # Send message to backend and get AI response
     with st.spinner("Bot is thinking..."):
         try:
@@ -127,7 +131,7 @@ if send_btn and user_message.strip():
             if resp.ok:
                 # Add AI response to chat history
                 st.session_state["chat_history"].append({"type": "ai", "content": resp.text})
-                
+
                 # Attempt to sync with backend chat history
                 try:
                     hist_resp = requests.get(f"{BACKEND_URL}/", headers={"x-model-id": model})
@@ -138,8 +142,8 @@ if send_btn and user_message.strip():
                             st.session_state["chat_history"] = backend_history
                 except Exception:
                     # Continue with local history if backend sync fails
-                    pass  
-                
+                    pass
+
                 st.rerun()  # Refresh UI to show new messages
             else:
                 st.error(f"Failed: {resp.text}")
