@@ -145,12 +145,6 @@ MAX_CHUNK_COUNT=256                             # maximum number of chunks (defa
 
 ---
 
-## License
-
-This project is released under the [MIT License](LICENSE). Feel free to use and modify it in your own applications.
-
----
-
 ## CI/CD: Tag-Based Build & Kubernetes Deployment
 
 This repository includes an automated deployment workflow located at `.github/workflows/deploy.yml`. It builds versioned container images for the backend and Streamlit frontend, then deploys them to an IONOS-managed Kubernetes cluster when a version tag is pushed.
@@ -210,25 +204,13 @@ kubectl rollout status deployment/backend
 kubectl rollout status deployment/streamlit
 ```
 
-### Creating a Deployment Tag
-
-Push a semantic (numeric) tag to trigger the pipeline:
-
-```bash
-git pull
-git tag 1.2.0
-git push origin 1.2.0
-```
-
-### Correcting a Mistaken Tag (Before Rerun)
-
-```bash
-git tag -d 1.2.0
-git push origin :refs/tags/1.2.0
-git tag 1.2.1
-git push origin 1.2.1
-```
-
 ### Summary
 
 Tagging a commit with a properly formatted version (`X.Y.Z`) triggers an automated build of backend and frontend images, publication to the configured registry (both immutable and `latest` tags), templating of the Kubernetes manifest, and a controlled rollout with status verification. No additional testing, linting, or release note generation steps are part of this workflow at present.
+
+---
+## License
+
+This project is released under the [MIT License](LICENSE). Feel free to use and modify it in your own applications.
+
+---
