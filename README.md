@@ -23,9 +23,8 @@ This repository contains a **full-stack RAG chatbot** powered by LangChain and I
 - [Frontend Setup](#frontend-setup)
 - [Usage](#usage)
 - [Project Structure](#project-structure)
+- [CI/CD Deployment](#cicd-tag-based-build--kubernetes-deployment)
 - [License](#license)
- - [CI/CD Deployment](#cicd-tag-based-build--kubernetes-deployment)
- - [License](#license)
 
 ---
 
