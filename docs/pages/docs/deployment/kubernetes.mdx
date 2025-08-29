@@ -105,12 +105,5 @@ kubectl delete -f kubernetes_config.yaml
 kubectl delete secret secrets
 ```
 
-## Hardening Ideas
-- Use separate secrets per component
-- Network Policies restricting egress
-- Resource requests & limits
-- HorizontalPodAutoscaler for traffic spikes
-- PodDisruptionBudget for resilience
-
 ## Summary
 Kubernetes deployment is driven by a templated manifest, immutable versioned images, and recreated secrets. Managing kubeconfig securely and validating rollouts keeps the platform reliable.
