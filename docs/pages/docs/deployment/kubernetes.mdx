@@ -45,7 +45,7 @@ You need the kubeconfig file to let both local `kubectl` and CI access the clust
 6. Save the file securely (e.g., `~/kube/cluster-admin.yaml`).
 7. (Optional) Review / redact before storing as a secret.
 
-### Screenshots
+### Steps to get your KubeConfig from IONOS Cloud:
 Step 1:
 ![Dashboard Home – landing](/assets/kubernetes/dashboard.jpg)
 Step 2:
@@ -58,52 +58,3 @@ Step 3:
 2. GitHub: Settings → Secrets and variables → Actions → New repository secret.
 3. Name: `KUBE_CONFIG`.
 4. Paste → Save.
-
-## Local Validation
-Mac/Linux:
-```bash
-export KUBECONFIG=~/kube/cluster-admin.yaml
-kubectl get nodes
-kubectl get deployments
-```
-Windows PowerShell:
-```powershell
-$env:KUBECONFIG = "$HOME\kube\cluster-admin.yaml"
-kubectl get nodes
-```
-
-## Verifying Live Deployment
-```bash
-kubectl get pods
-kubectl get svc backend-service
-kubectl get svc streamlit-service
-```
-If `EXTERNAL-IP` is `<pending>`, wait until the LoadBalancer is provisioned.
-
-## Rollouts & Rollback
-Check rollout:
-```bash
-kubectl rollout status deployment/backend
-```
-Rollback to previous revision:
-```bash
-kubectl rollout undo deployment/backend --to-revision=1
-```
-List revisions (if supported by your cluster's controller history limit):
-```bash
-kubectl rollout history deployment/backend
-```
-
-## Scaling
-```bash
-kubectl scale deployment/backend --replicas=2
-```
-
-## Cleanup
-```bash
-kubectl delete -f kubernetes_config.yaml
-kubectl delete secret secrets
-```
-
-## Summary
-Kubernetes deployment is driven by a templated manifest, immutable versioned images, and recreated secrets. Managing kubeconfig securely and validating rollouts keeps the platform reliable.
