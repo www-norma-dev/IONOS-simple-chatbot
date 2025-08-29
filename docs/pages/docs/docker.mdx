@@ -52,31 +52,3 @@ Only code changes? Usually `docker compose up --build` is enough.
 | Changes not visible | Cached image layer | Use `--build` or `build --no-cache` |
 | Slow first start | Dependency install | Subsequent runs are faster due to layer caching |
 
-## Quick Backend Health Check
-```powershell
-curl http://localhost:8000/
-```
-Expect a JSON response.
-
-## File Reference
-Excerpt from `docker-compose.yml`:
-```yaml
-services:
-  backend-service:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    environment:
-      - IONOS_API_KEY=${IONOS_API_KEY}
-      - TAVILY_API_KEY=${TAVILY_API_KEY}
-
-  frontend-service:
-    build: ./frontends/streamlit-starter
-    ports:
-      - "8501:8501"
-```
-
-## Next Steps
-- Explore the API at `/docs`
-- Modify agent tools in `backend/chatbot_agent.py`
-- Try deploying via the `deployment` section.
