@@ -10,6 +10,10 @@ export default {
   frontend: {
     title: "Frontend Guide",
   },
+  deployment: {
+    title: "Deployment",
+  },
+  docker: "Docker",
   "project-structure": "Project Structure",
   license: "License",
 };

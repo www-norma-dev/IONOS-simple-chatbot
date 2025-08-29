@@ -1,0 +1,94 @@
+# CI/CD Pipeline
+
+This page explains the automated build & container publish workflow executed by GitHub Actions. For Kubernetes cluster setup & operations see the separate `Kubernetes` page.
+
+## Overview
+A GitHub Actions workflow (`.github/workflows/deploy.yml`) builds Docker images for:
+- Backend (FastAPI)
+- Streamlit Frontend
+
+It tags them with both the semantic version (from the pushed Git tag) and `latest`, then applies a templated Kubernetes manifest against your IONOS-managed cluster.
+
+## Trigger Strategy
+The workflow runs only when you push a Git tag matching:
+```
+[0-9]+.[0-9]+.[0-9]+
+```
+Examples: `1.0.0`, `2.3.7`.
+
+## High-Level Pipeline Steps
+1. Checkout code
+2. Login to registry (using `DOCKER_USERNAME` / `DOCKER_PASSWORD` secrets + `IMAGE_REGISTRY` variable)
+3. Build & push backend image (version + latest)
+4. Build & push frontend image (version + latest)
+5. Install `kubectl`
+6. Create/update Kubernetes secret `secrets` with API keys
+7. Template `kubernetes_config.tpl` → `kubernetes_config.yaml` (env substitution of image names)
+8. Validate manifest (client dry run)
+9. Apply manifest
+10. Wait for rollout of `backend` & `streamlit` deployments
+
+## Image Tagging
+| Component | Version Tag | Latest Tag |
+|-----------|-------------|------------|
+| Backend   | `<IMAGE_REGISTRY>/backend:<version>` | `<IMAGE_REGISTRY>/backend:latest` |
+| Streamlit | `<IMAGE_REGISTRY>/frontend:<version>` | `<IMAGE_REGISTRY>/frontend:latest` |
+
+Use immutable `<version>` in production manifests.
+
+## Required Variables & Secrets
+| Type | Name | Description |
+|------|------|-------------|
+| Repository Variable | `IMAGE_REGISTRY` | Base registry (e.g. `registry.example.com/myproj`) |
+| Git Tag (runtime) | `github.ref_name` | Injected as `VERSION` env in job |
+| Secret | `DOCKER_USERNAME` / `DOCKER_PASSWORD` | Registry auth |
+| Secret | `KUBE_CONFIG` | kubeconfig content for your IONOS cluster |
+| Secret | `IONOS_API_KEY` | Access for model inference |
+| Secret | `TAVILY_API_KEY` | Optional web search tool |
+
+## Creating a Release Tag
+1. Ensure main branch is clean & tested.
+2. Update version references (if any) and commit.
+3. Create an annotated tag:
+```bash
+git tag -a 1.2.0 -m "Release 1.2.0"
+git push origin 1.2.0
+```
+Workflow will start automatically.
+
+## Monitoring the Workflow
+- GitHub → Actions → Select the run
+- Inspect logs for build, push, apply steps
+- Common wait times: image pull & LB provisioning
+
+## Verifying Deployment
+```bash
+kubectl get pods
+kubectl get svc backend-service
+kubectl get svc streamlit-service
+```
+Check external IP columns (LoadBalancer) for public endpoints.
+
+## Rollback
+Scale or rollback if needed:
+```bash
+kubectl rollout undo deployment/backend --to-revision=1
+```
+Or deploy a prior tag by re-tagging or editing manifest images.
+
+## Cleanup
+Delete resources:
+```bash
+kubectl delete -f kubernetes_config.yaml
+kubectl delete secret secrets
+```
+
+## Future Enhancements (Ideas)
+- Add lint/test stages before build
+- Integrate vulnerability scanning (Trivy, Grype)
+- Blue/Green or Canary deployments
+- Automated CHANGELOG generation
+
+---
+## Summary
+Tagging a semantic version triggers an end-to-end build & deploy to IONOS Kubernetes using templated manifests, versioned images, and recreated secrets. Provide your kubeconfig via the `KUBE_CONFIG` secret and keep API keys rotated for security.
