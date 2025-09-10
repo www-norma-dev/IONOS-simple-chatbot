@@ -8,16 +8,17 @@ Features include:
 - Interactive chat interface with message history
 - Real-time communication with FastAPI backend
 """
-import os
 
 import streamlit as st
 import requests
+import time
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # Backend API configuration
-BACKEND_URL = "http://backend-service:8000"
+BACKEND_URL = "http://localhost:8000"
 
 # Configure Streamlit page settings
 st.set_page_config(page_title="IONOS Chatbot", page_icon="💬", layout="wide")
@@ -26,28 +27,7 @@ st.set_page_config(page_title="IONOS Chatbot", page_icon="💬", layout="wide")
 st.sidebar.title("💬 Chat Controls")
 st.sidebar.markdown("---")
 
-# RAG Initialization Section
-st.sidebar.subheader("🔗 RAG Initialization")
-rag_url = st.sidebar.text_input("Page URL", value="https://example.com", key="rag_url")
-
-# Handle RAG initialization button click
-if st.sidebar.button("Initialize RAG", key="init_rag_btn"):
-    try:
-        # Send POST request to initialize RAG with the provided URL
-        resp = requests.post(f"{BACKEND_URL}/init", json={"page_url": rag_url})
-        if resp.ok:
-            # Fetch updated chat history after successful RAG initialization
-            hist_resp = requests.get(f"{BACKEND_URL}/", headers={"x-model-id": st.session_state.get('model_select', '')})
-            if hist_resp.ok:
-                st.session_state["chat_history"] = hist_resp.json()
-            st.sidebar.success(f"RAG initialized! {resp.json()}")
-            st.rerun()  # Force UI refresh to show updated state
-        else:
-            st.sidebar.error(f"Failed: {resp.text}")
-    except Exception as e:
-        st.sidebar.error(f"Error: {e}")
-
-st.sidebar.markdown("---")
+# RAG Initialization UI and logic removed (step 2)
 
 # Model Selection Section
 st.sidebar.subheader("🤖 Model Selection")
@@ -74,18 +54,9 @@ st.sidebar.markdown("---")
 # --- Main Chat Interface ---
 st.title("IONOS Chatbot 🗨️")
 
-# Initialize chat history from backend or create empty list
+# Initialize chat history in frontend only
 if "chat_history" not in st.session_state:
-    try:
-        # Fetch existing chat history from backend
-        resp = requests.get(f"{BACKEND_URL}/", headers={"x-model-id": model})
-        if resp.ok:
-            st.session_state["chat_history"] = resp.json()
-        else:
-            st.session_state["chat_history"] = []
-    except Exception:
-        # Fallback to empty history if backend is unavailable
-        st.session_state["chat_history"] = []
+    st.session_state["chat_history"] = []
 
 # Display chat messages in bubble format
 st.markdown("#### Conversation")
@@ -97,7 +68,7 @@ with chat_container:
             st.markdown(
                 f"<div style='text-align:right; background:#4F8EF7; color:white; padding:10px; "
                 f"border-radius:10px; margin:5px 0 5px 30%;'>"
-                f"<b>🧑‍💻 You:</b> {msg['content']}</div>",
+                f"<b>🧑‍💻 You:</b> {msg['content']}</div>", 
                 unsafe_allow_html=True
             )
         elif msg["type"] == "ai":
@@ -105,7 +76,7 @@ with chat_container:
             st.markdown(
                 f"<div style='text-align:left; background:#FFD166; color:#222; padding:10px; "
                 f"border-radius:10px; margin:5px 30% 5px 0;'>"
-                f"<b>🤖 Bot:</b> {msg['content']}</div>",
+                f"<b>🤖 Bot:</b> {msg['content']}</div>", 
                 unsafe_allow_html=True
             )
 
@@ -118,32 +89,36 @@ with st.form("chat_form", clear_on_submit=True):
 if send_btn and user_message.strip():
     # Add user message to chat history immediately for better UX
     st.session_state["chat_history"].append({"type": "human", "content": user_message})
-
-    # Send message to backend and get AI response
+    # Ensure we never send an empty messages array
+    messages_to_send = st.session_state["chat_history"] if st.session_state["chat_history"] else [{"type": "human", "content": user_message}]
     with st.spinner("Bot is thinking..."):
         try:
-            # Post user message to backend with selected model
             resp = requests.post(
                 f"{BACKEND_URL}/",
-                json={"prompt": user_message},
+                json={"messages": messages_to_send},
                 headers={"x-model-id": model},
             )
             if resp.ok:
-                # Add AI response to chat history
-                st.session_state["chat_history"].append({"type": "ai", "content": resp.text})
-
-                # Attempt to sync with backend chat history
-                try:
-                    hist_resp = requests.get(f"{BACKEND_URL}/", headers={"x-model-id": model})
-                    if hist_resp.ok:
-                        backend_history = hist_resp.json()
-                        # Update local history if backend has more recent messages
-                        if len(backend_history) > len(st.session_state["chat_history"]):
-                            st.session_state["chat_history"] = backend_history
-                except Exception:
-                    # Continue with local history if backend sync fails
-                    pass
-
+                # Parse backend response
+                data = resp.json() if resp.headers.get('content-type','').startswith('application/json') else {"type": "ai", "content": resp.text}
+                # If the response is a list of messages, append all
+                if isinstance(data, list):
+                    for msg in data:
+                        st.session_state["chat_history"].append(msg)
+                # If the response is a single message
+                elif isinstance(data, dict):
+                    # Handle tool messages
+                    if data.get("type") == "tool":
+                        st.session_state["chat_history"].append({
+                            "type": "tool",
+                            "name": data.get("name", "tool"),
+                            "content": data.get("content", "")
+                        })
+                    else:
+                        st.session_state["chat_history"].append({
+                            "type": data.get("type", "ai"),
+                            "content": data.get("content", "")
+                        })
                 st.rerun()  # Refresh UI to show new messages
             else:
                 st.error(f"Failed: {resp.text}")
