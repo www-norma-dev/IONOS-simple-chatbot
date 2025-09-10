@@ -11,7 +11,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { GetStaticProps } from "next";
 import { JSX } from "react";
-import { PlayCircle, PauseCircle } from "lucide-react";
+import { PlayCircle } from "lucide-react";
 import { useRef, useState } from "react";
 
 type Props = {
