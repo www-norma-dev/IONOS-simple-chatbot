@@ -11,6 +11,8 @@ import Image from "next/image";
 import Link from "next/link";
 import type { GetStaticProps } from "next";
 import { JSX } from "react";
+import { PlayCircle, PauseCircle } from "lucide-react";
+import { useRef, useState } from "react";
 
 type Props = {
   stars: number | null;
@@ -18,7 +20,8 @@ type Props = {
 };
 
 export const getStaticProps: GetStaticProps<Props> = async () => {
-  const repoApi = "https://api.github.com/repos/www-norma-dev/IONOS-simple-chatbot";
+  const repoApi =
+    "https://api.github.com/repos/www-norma-dev/IONOS-simple-chatbot";
   const contributorsApi =
     "https://api.github.com/repos/www-norma-dev/IONOS-simple-chatbot/contributors?per_page=100&anon=1";
 
@@ -28,7 +31,9 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
   try {
     const [repoRes, contribRes] = await Promise.all([
       fetch(repoApi, { headers: { Accept: "application/vnd.github+json" } }),
-      fetch(contributorsApi, { headers: { Accept: "application/vnd.github+json" } }),
+      fetch(contributorsApi, {
+        headers: { Accept: "application/vnd.github+json" },
+      }),
     ]);
 
     if (repoRes.ok) {
@@ -50,19 +55,23 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
   }
 
   return {
-  props: { stars, contributors },
+    props: { stars, contributors },
   };
 };
 
 export default function Home({ stars, contributors }: Props): JSX.Element {
   const base = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const videoSrc = `${base}/assets/video-chatbot.mp4`;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-100 via-white to-purple-300 transition-colors duration-300">
       {/* Navigation */}
       <nav className="relative z-10 flex items-center justify-between px-6 py-6 lg:px-12 backdrop-blur-sm border-b border-gray-200 bg-white/80">
         <div className="flex items-center space-x-3">
-          <div className="p-2 bg-white/50 rounded-xl border border-gray-300 backdrop-blur-sm">
+          <div className="p-5 bg-white/50 rounded-xl border border-gray-300 backdrop-blur-sm">
             <Bot className="h-6 w-6 text-blue-600" />
           </div>
           <span className="text-xl font-bold text-gray-900">
@@ -116,7 +125,6 @@ export default function Home({ stars, contributors }: Props): JSX.Element {
             </div>
           </div>
           <Link
-
             href="https://github.com/www-norma-dev/IONOS-simple-chatbot"
             target="_blank"
             rel="noopener noreferrer"
@@ -149,9 +157,9 @@ export default function Home({ stars, contributors }: Props): JSX.Element {
                   </span>
                 </h1>
                 <p className="text-xl lg:text-2xl text-gray-700 leading-relaxed font-medium  max-w-2xl">
-                  Plug into the IONOS AI Models Hub and Norma’s AI evaluation 
-                  to launch a production‑ready Agents,
-                  LangChain integration, and scalable best practices baked in.
+                  Plug into the IONOS AI Models Hub and Norma’s AI evaluation to
+                  launch a production‑ready Agents, LangChain integration, and
+                  scalable best practices baked in.
                 </p>
               </div>
 
@@ -211,6 +219,55 @@ export default function Home({ stars, contributors }: Props): JSX.Element {
         </div>
       </div>
 
+      {/* Video Section (under Hero) */}
+      <section className="px-6 pb-20 lg:px-12">
+        <div className="mx-auto max-w-5xl text-center">
+          {/* Glassmorphism video frame with subtle glow */}
+          <div className="relative group">
+            {/* gradient border wrapper */}
+            <div className="p-[20px] rounded-3xl bg-gradient-to-r from-teal-400/30 via-purple-500/30 to-purple-400/30">
+              <div className="relative rounded-3xl overflow-hidden border border-white/40 bg-white/30 backdrop-blur-xl shadow-2xl">
+                {/* the video */}
+                <video
+                  ref={videoRef}
+                  src={videoSrc}
+                  className="w-full aspect-video"
+                  preload="metadata"
+                  controls={playing}
+                  playsInline
+                  onPlay={() => setPlaying(true)}
+                  onPause={() => setPlaying(false)}
+                  onEnded={() => setPlaying(false)}
+                />
+
+                {/* Play overlay */}
+                {!playing && (
+                  <button
+                    aria-label="Play video"
+                    onClick={() => {
+                      const v = videoRef.current;
+                      if (v) v.play();
+                    }}
+                    className="absolute inset-0 flex items-center justify-center"
+                  >
+                    {/* animated ring */}
+                    <span className="absolute h-24 w-24 rounded-full ring-8 ring-white/40 animate-ping" />
+                    {/* glass play button */}
+                    <span
+                      className="relative inline-flex items-center justify-center h-20 w-20 rounded-full
+                               bg-white/40 border border-white/60 backdrop-blur-xl shadow-xl
+                               transition-transform duration-200 group-hover:scale-105"
+                    >
+                      <PlayCircle className="h-12 w-12 text-purple-500" />
+                    </span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Features Section */}
       <div id="features" className="px-6 py-20 lg:px-12">
         <div className="mx-auto max-w-6xl">
@@ -218,16 +275,26 @@ export default function Home({ stars, contributors }: Props): JSX.Element {
             {[
               {
                 icon: <Zap className="h-10 w-10 text-green-500" />,
-                title: "Index & Retrieve",
-                desc: `Rapidly scrape and index any webpage using TF‑IDF and LangChain—delivering lightning‑fast document retrieval out of the box.`,
-                tags: ["TF‑IDF", "Web Scraping", "LangChain", "RAG"],
+                title: "Adaptive Knowledge Search",
+                desc: `Search and retrieve fresh information from the open web in real time, powered by ReAct-style reasoning. The chatbot continuously adapts its knowledge without being tied to pre-scraped datasets.`,
+                tags: [
+                  "Web Search",
+                  "ReAct",
+                  "Dynamic Context",
+                  "Real-time Retrieval",
+                ],
                 color: "green",
               },
               {
                 icon: <FlaskConical className="h-10 w-10 text-purple-500" />,
-                title: "Seamless AI Chat",
-                desc: `Engage with your indexed content via the IONOS AI Models Hub, with FastAPI‑powered routing and full conversation history support.`,
-                tags: ["FastAPI", "IONOS AI", "Contextual Chat", "History"],
+                title: "Context-Aware Conversations",
+                desc: `Interact with an AI that remembers, reasons, and adapts. Powered by the IONOS AI Models Hub and ReAct Agents, conversations flow naturally with contextual awareness across multiple turns.`,
+                tags: [
+                  "ReAct Agent",
+                  "IONOS AI",
+                  "Multi-turn Context",
+                  "Reasoning",
+                ],
                 color: "purple",
               },
             ].map(({ icon, title, desc, tags, color }) => (
@@ -268,12 +335,13 @@ export default function Home({ stars, contributors }: Props): JSX.Element {
             {/* subtle gradient glow behind the card */}
             <div className="relative !space-y-5">
               <h2 className="text-5xl sm:text-6xl font-extrabold text-gray-900 leading-tight">
-                Ready to launch your RAG‑powered chatbot?
+                Ready to launch your intelligent assistant?
               </h2>
               <p className="text-lg sm:text-xl text-gray-600 leading-relaxed">
-                Join thousands of developers on Norma’s platform and the IONOS
-                AI Models Hub to deploy intelligent, retrieval‑augmented
-                chatbots in minutes.
+                With the IONOS Starter Pack, deploy context-aware, web-connected
+                chatbots in minutes. Thousands of developers already use Norma’s
+                platform and the IONOS AI Models Hub to create next-generation
+                AI agents.
               </p>
               <div className="flex flex-col sm:flex-row justify-center gap-8">
                 <Link
