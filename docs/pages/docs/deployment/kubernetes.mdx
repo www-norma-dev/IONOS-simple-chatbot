@@ -1,0 +1,60 @@
+# Kubernetes Deployment
+
+This page covers Kubernetes-specific concepts: manifest templating, secrets, obtaining kubeconfig from IONOS Cloud, verifying, rollback, and cleanup.
+
+## Manifest Templating
+The file `kubernetes_config.tpl` contains `${BACKEND_IMAGE}` and `${FRONTEND_IMAGE}` placeholders. During CI the workflow exports these env vars and runs:
+```bash
+envsubst < kubernetes_config.tpl > kubernetes_config.yaml
+```
+So the resulting applied file references the exact immutable image tags from the release tag.
+
+### Snippet
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  template:
+    spec:
+      containers:
+      - name: backend
+        image: ${BACKEND_IMAGE}  # substituted in CI
+```
+
+## Secrets
+Runtime API keys are injected via a recreated generic secret `secrets`:
+```bash
+kubectl delete secret secrets --ignore-not-found
+kubectl create secret generic secrets \
+  --from-literal=IONOS_API_KEY=*** \
+  --from-literal=TAVILY_API_KEY=***
+```
+Deployments reference them with `valueFrom.secretKeyRef`.
+
+## Obtaining kubeconfig from IONOS Cloud
+You need the kubeconfig file to let both local `kubectl` and CI access the cluster.
+
+### Console Steps
+1. Sign in to the IONOS Cloud Console (dashboard home).
+2. In the left sidebar click **Containers**.
+3. Click **Managed Kubernetes**.
+4. Select your cluster (e.g. `ionos-chatbot-starter-pack`).
+5. In the Cluster Settings view click the download button next to **kubeconfig.yaml**.
+6. Save the file securely (e.g., `~/kube/cluster-admin.yaml`).
+7. (Optional) Review / redact before storing as a secret.
+
+### Steps to get your KubeConfig from IONOS Cloud:
+Step 1:
+![Dashboard Home – landing](/assets/kubernetes/dashboard.jpg)
+Step 2:
+![Containers Menu – select Managed Kubernetes](/assets/kubernetes/containers-menu.jpg)
+Step 3:
+![Cluster Settings – download kubeconfig.yaml](/assets/kubernetes/download.jpg)
+
+## Add kubeconfig as GitHub Secret
+1. Open the file → copy all contents.
+2. GitHub: Settings → Secrets and variables → Actions → New repository secret.
+3. Name: `KUBE_CONFIG`.
+4. Paste → Save.

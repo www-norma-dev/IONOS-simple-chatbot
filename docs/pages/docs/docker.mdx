@@ -1,0 +1,54 @@
+# Local Testing with Docker
+
+In this part, we will explain how to run the backend (FastAPI) and Streamlit chat UI together using Docker Compose for quick local testing.
+
+## Prerequisites
+- Install Docker (Docker Desktop for Windows/macOS, or Docker Engine for Linux).
+- (Optional) Create a `.env` file at the project root so environment variables are auto-loaded:
+
+```env
+IONOS_API_KEY=your_ionos_key_here
+TAVILY_API_KEY=your_tavily_key_here
+```
+
+On PowerShell you can also export them temporarily:
+```powershell
+$env:IONOS_API_KEY = "your_ionos_key_here"
+$env:TAVILY_API_KEY = "your_tavily_key_here"
+```
+
+## Start Services
+From the repository root (`IONOS-simple-chatbot/`):
+```powershell
+docker compose up --build
+```
+What happens:
+- Builds `backend/` → image `backend:latest` exposing FastAPI at http://localhost:8000
+- Builds `frontends/streamlit-starter/` → image `frontend:latest` serving UI at http://localhost:8501
+
+## Verify
+- Open http://localhost:8000/docs for the FastAPI Swagger UI
+- Open http://localhost:8501 for the Streamlit chat interface
+
+## Stopping & Cleanup
+Press Ctrl+C to stop. To also remove containers, network, and anonymous volumes:
+```powershell
+docker compose down -v
+```
+
+## Rebuild After Changes
+If Python dependencies changed (e.g., edited `requirements.txt`):
+```powershell
+docker compose build --no-cache backend-service
+ docker compose up
+```
+Only code changes? Usually `docker compose up --build` is enough.
+
+## Troubleshooting
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Port already in use | Another process on 8000/8501 | Edit `ports:` mapping in compose file |
+| 401 / tool errors | Missing API keys | Ensure env vars set (`docker exec -it <container> env`) |
+| Changes not visible | Cached image layer | Use `--build` or `build --no-cache` |
+| Slow first start | Dependency install | Subsequent runs are faster due to layer caching |
+

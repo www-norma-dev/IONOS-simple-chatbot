@@ -23,6 +23,7 @@ This repository contains a **full-stack RAG chatbot** powered by LangChain and I
 - [Frontend Setup](#frontend-setup)
 - [Usage](#usage)
 - [Project Structure](#project-structure)
+- [CI/CD Deployment](#cicd-tag-based-build--kubernetes-deployment)
 - [License](#license)
 
 ---
@@ -143,6 +144,72 @@ MAX_CHUNK_COUNT=256                             # maximum number of chunks (defa
 
 ---
 
+## CI/CD: Tag-Based Build & Kubernetes Deployment
+
+This repository includes an automated deployment workflow located at `.github/workflows/deploy.yml`. It builds versioned container images for the backend and Streamlit frontend, then deploys them to an IONOS-managed Kubernetes cluster when a version tag is pushed.
+
+### Trigger
+
+- Event: `push`
+- Condition: Git tag name matches the regex `[0-9]+.[0-9]+.[0-9]+` (examples: `1.0.0`, `2.3.7`). Only tags in this strict numeric format start the workflow.
+
+### High-Level Steps
+
+1. Checkout source code.
+2. Log in to the container registry using `DOCKER_USERNAME` / `DOCKER_PASSWORD` and the repository variable `IMAGE_REGISTRY`.
+3. Build & push two images (version + `latest` tag each):
+   - Backend (`./backend`, `./backend/Dockerfile`)
+   - Frontend Streamlit app (`./frontends/streamlit-starter`, `./frontends/streamlit-starter/Dockerfile`)
+4. Install `kubectl` via `azure/setup-kubectl`.
+5. Configure kube context using the `KUBE_CONFIG` secret.
+6. Recreate Kubernetes secret `secrets` with keys `IONOS_API_KEY` and `TAVILY_API_KEY`.
+7. Template `kubernetes_config.tpl` into `kubernetes_config.yaml` using `envsubst` (environment variable substitution).
+8. Validate manifest with a client-side dry run.
+9. Apply manifest to the cluster.
+10. Wait for rollout completion of deployments `backend` and `streamlit`.
+
+### Image Tagging Convention
+
+For each successful tagged build:
+
+| Component | Immutable Tag | Convenience Tag |
+|-----------|---------------|-----------------|
+| Backend   | `<IMAGE_REGISTRY>/backend:<tag>`   | `<IMAGE_REGISTRY>/backend:latest`   |
+| Frontend  | `<IMAGE_REGISTRY>/frontend:<tag>`  | `<IMAGE_REGISTRY>/frontend:latest`  |
+
+Use the immutable (version) tag in production manifests; `latest` is only a moving pointer.
+
+### Variables & Secrets Consumed
+
+| Type | Name | Purpose |
+|------|------|---------|
+| Repository Variable | `IMAGE_REGISTRY` | Base registry path used for tagging & login |
+| Git Tag (runtime) | `github.ref_name` → `VERSION` | Version string injected into image names |
+| Secret | `DOCKER_USERNAME` / `DOCKER_PASSWORD` | Registry authentication |
+| Secret | `KUBE_CONFIG` | kubeconfig content for cluster access |
+| Secret | `IONOS_API_KEY` | Access to IONOS AI Model Hub |
+| Secret | `TAVILY_API_KEY` | Use the Tavily web search tool in the agent |
+
+### Kubernetes Secret Handling
+
+The workflow deletes (if present) and recreates a generic secret named `secrets` containing `IONOS_API_KEY` and `TAVILY_API_KEY` each run, ensuring updated credential values are applied.
+
+### Deployment Validation
+
+After applying manifests, the workflow blocks until both deployments report a successful rollout:
+
+```
+kubectl rollout status deployment/backend
+kubectl rollout status deployment/streamlit
+```
+
+### Summary
+
+Tagging a commit with a properly formatted version (`X.Y.Z`) triggers an automated build of backend and frontend images, publication to the configured registry (both immutable and `latest` tags), templating of the Kubernetes manifest, and a controlled rollout with status verification. No additional testing, linting, or release note generation steps are part of this workflow at present.
+
+---
 ## License
 
 This project is released under the [MIT License](LICENSE). Feel free to use and modify it in your own applications.
+
+---
