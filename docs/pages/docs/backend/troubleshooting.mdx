@@ -21,7 +21,7 @@ from chatbot_agent import create_chatbot_agent
 And run from the backend folder:
 
 ```powershell
-python .\main.py
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ## Missing x-model-id header

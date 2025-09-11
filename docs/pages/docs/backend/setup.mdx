@@ -43,8 +43,8 @@ Tip: You can also put these in a `.env` file.
 
 ## 5. Run the server
 
-```powershell
-python .\main.py
+```bash
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 The API will be available at `http://localhost:8000`.
@@ -60,7 +60,7 @@ Invoke-RestMethod `
 	-Uri "http://127.0.0.1:8000/" `
 	-Method Post `
 	-Headers @{ "x-model-id" = "mistralai/Mistral-Small-24B-Instruct" } `
-	-Body (@{ prompt = "Hello!" } | ConvertTo-Json) `
+	-Body (@{ messages = @(@{ type = "human"; content = "Hello!" }) } | ConvertTo-Json -Depth 3) `
 	-ContentType "application/json"
 ```
 
@@ -70,5 +70,5 @@ Invoke-RestMethod `
 curl -s -X POST "http://127.0.0.1:8000/" \
   -H "x-model-id: mistralai/Mistral-Small-24B-Instruct" \
   -H "Content-Type: application/json" \
-  -d '{"prompt":"Hello!"}'
+  -d '{"messages":[{"type":"human","content":"Hello!"}]}'
 ```
