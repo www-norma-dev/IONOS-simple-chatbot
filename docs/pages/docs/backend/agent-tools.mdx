@@ -7,7 +7,6 @@ title: Agent Tools
 This app uses a LangGraph ReAct agent with LangChain tools (defined in `backend/chatbot_agent.py`). Tools let the model call out to functions like search, APIs, or utilities.
 
 ## What you get out-of-the-box
-- `search_documents(query, config)`: looks up content in your local TF‑IDF retriever when provided via `RunnableConfig.configurable['retriever']`.
 - `web_search(query)`: fetches web results via Tavily (requires `TAVILY_API_KEY`).
 
 Create the agent:
@@ -16,10 +15,27 @@ from chatbot_agent import create_chatbot_agent
 agent = create_chatbot_agent(model_name="mistralai/Mistral-Small-24B-Instruct")
 ```
 
-## Tool contract (quick)
-- Input: a single string argument (query) is common; add more only if necessary.
-- Output: return a concise string (markdown allowed) that’s useful to the model.
-- Errors: catch exceptions and return a short error message; don’t raise raw tracebacks to the user.
+## Current Implementation
+
+The ReAct agent currently has **one tool** available:
+
+```python
+@tool
+def web_search(query: str) -> str:
+    """
+    Do a web search to query additional information for the user.
+    """
+    logger.info(f"Searching web for: {query}")
+    retriever = TavilySearchAPIRetriever(k=8)
+    chunks = retriever.invoke(query)
+    logger.info(chunks)
+    return "\n\n".join(chunk.page_content for chunk in chunks)
+```
+
+The agent is created with:
+```python
+return create_react_agent(model=llm, prompt=_prompt, tools=[web_search], state_schema=AgentStatePydantic)
+```
 
 ## Add a new tool (step‑by‑step)
 1) Define a function with a helpful docstring and decorate with `@tool`.
@@ -38,40 +54,12 @@ def get_current_time(_: str) -> str:
     return datetime.datetime.utcnow().isoformat()
 
 # In create_chatbot_agent(...), include `get_current_time` in the tools list.
-# Example: tools=[search_documents, web_search, get_current_time] in backend/chatbot_agent.py
+# Example: tools=[web_search, get_current_time] in backend/chatbot_agent.py
 ```
-
-
-
-## Context-aware tools (retriever)
-`search_documents` reads a `TFIDFRetriever` from the LangChain `RunnableConfig` you pass at call time.
-
-```python
-from langchain_community.retrievers import TFIDFRetriever
-from langchain_core.runnables import RunnableConfig
-from langgraph.prebuilt.chat_agent_executor import AgentStatePydantic
-from langchain_core.messages import HumanMessage
-
-# Build a simple retriever
-retriever = TFIDFRetriever.from_texts([
-    "This repository contains a RAG chatbot.",
-    "It uses a FastAPI backend and optional Streamlit / Next.js frontends.",
-])
-
-# Initial conversational state
-state = AgentStatePydantic(messages=[HumanMessage(content="Summarize the repo in 2 bullets.")])
-
-# Invoke the agent with retriever bound in config
-result = agent.invoke(
-    input=state,
-    config=RunnableConfig(configurable={"retriever": retriever}),
-)
-```
-If you don't pass a retriever in `config.configurable`, `search_documents` won’t run; the agent can still use `web_search` if enabled.
 
 ## Best practices
 - Keep tool outputs short and factual; avoid speculation.
 - Validate and sanitize inputs (URLs, IDs).
 - Timeouts and retries: be defensive against slow or flaky APIs.
-- Don’t log secrets; read them from env (e.g., IONOS_API_KEY, TAVILY_API_KEY).
+- Don't log secrets; read them from env (e.g., IONOS_API_KEY, TAVILY_API_KEY).
 - Cache where it helps (e.g., web results) to reduce latency and cost.
