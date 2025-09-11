@@ -1,35 +1,39 @@
-# IONOS Chatbot
+# IONOS Agent Starter Pack
 
-A full‑stack chatbot powered by LangGraph/LangChain and IONOS models. It supports web search, optional RAG over URLs, and an extensible tool system.
+A full‑stack intelligent agent powered by LangGraph ReAct architecture and IONOS AI Models Hub. It features dynamic web search, context-aware reasoning, and an extensible tool system for building production-ready AI assistants.
 
-## What’s inside
+## What's inside
 - Backend: FastAPI service with a LangGraph ReAct agent (`backend/`).
 - Frontends: Next.js starter and Streamlit app (`frontends/`).
 - Docs: MDX documentation site (`docs/`).
 
 ## Features
 - Chat with IONOS‑hosted models via a simple HTTP API.
-- Tools: web search (Tavily) and optional local document search (TF‑IDF retriever).
-- Optional RAG: initialize from a URL and retrieve top‑K chunks (if enabled).
-- Easy to add your own tools.
+- Tools: real-time web search via Tavily API.
+- ReAct Agent: reasoning and acting with dynamic tool selection.
+- Easy to add your own tools and extend agent capabilities.
 
 ## Requirements
 - Python 3.10+
 - Node.js 18+
 - IONOS_API_KEY (required)
-- TAVILY_API_KEY (optional, for web search)
+- TAVILY_API_KEY (required for web search functionality)
 
 ## Quickstart
 1) Backend: follow the Windows‑friendly steps in [Backend Setup](/docs/backend/setup).
 2) Choose a frontend:
 	- [Next.js Setup](/docs/frontend/nextjs/setup)
 	- [Streamlit Overview](/docs/frontend/streamlit)
-3) Send a chat request with header `x-model-id` (e.g., `meta-llama/Llama-3.3-70B-Instruct`).
+3) Send a chat request with header `x-model-id` (e.g., `mistralai/Mistral-Small-24B-Instruct`).
 
 ## How it works
-The client sends messages to FastAPI → the agent reasons (ReAct) → tools are called as needed (e.g., `web_search`, `search_documents`) → the model produces a final answer.
+The client sends messages to FastAPI → the ReAct agent reasons about the request → tools are called dynamically as needed (e.g., `web_search` for real-time information) → the model produces a context-aware final answer.
 
 Learn more:
 - [Backend API](/docs/backend/api)
 - [Agent Tools](/docs/backend/agent-tools)
 - [Troubleshooting](/docs/backend/troubleshooting)
+
+
+
+

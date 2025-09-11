@@ -3,8 +3,8 @@ IONOS Chatbot Streamlit Application
 
 This application provides a web interface for interacting with the IONOS chatbot backend.
 Features include:
-- RAG (Retrieval-Augmented Generation) initialization from web URLs
-- Model selection for different LLaMA variants
+- ReAct agent with web search capabilities via Tavily API
+- Model selection for different IONOS AI models
 - Interactive chat interface with message history
 - Real-time communication with FastAPI backend
 """
@@ -26,8 +26,6 @@ st.set_page_config(page_title="IONOS Chatbot", page_icon="💬", layout="wide")
 # --- Sidebar Configuration ---
 st.sidebar.title("💬 Chat Controls")
 st.sidebar.markdown("---")
-
-# RAG Initialization UI and logic removed (step 2)
 
 # Model Selection Section
 st.sidebar.subheader("🤖 Model Selection")

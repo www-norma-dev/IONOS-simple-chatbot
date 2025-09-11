@@ -6,9 +6,10 @@ title: Streamlit Overview
 
 The Streamlit app provides a quick UI to:
 
-- Initialize RAG with a URL via the `/init` endpoint
-- Select a model ID to use for chat
-- Send messages to the backend and display responses
+- Select an IONOS AI model from the dropdown
+- Chat with the intelligent ReAct agent
+- View real-time responses with dynamic web search and reasoning
+- Experience context-aware conversations with chat history
 
 ## Run
 
@@ -38,9 +39,13 @@ Ensure the backend is running on `http://localhost:8000`.
 
 ## Configure
 
-- Backend URL is defined in the app as `BACKEND_URL = "http://localhost:8000"`
-- The model is passed in the `x-model-id` header
+- Backend URL is hardcoded as `BACKEND_URL = "http://localhost:8000"`
+- Model selection fetches available models from IONOS API dynamically
+- The agent automatically handles web search and reasoning without additional configuration
 
-## Notes
+## Features
 
-- If `/init` is not available (backend variant without RAG), you can comment out the initialization block in the sidebar.
+- **Real-time Chat**: Instant responses from IONOS AI models
+- **Dynamic Web Search**: Automatically searches the web when needed
+- **Context Awareness**: Remembers conversation history
+- **Model Selection**: Choose from available IONOS AI models
