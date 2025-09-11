@@ -10,28 +10,31 @@ Base URL: `http://localhost:8000`
 - `x-model-id`: required. Example: `meta-llama/Llama-3.3-70B-Instruct`.
 
 ## GET /
-Returns chat history as a list of LangChain messages.
+## GET /
+Returns an empty array (no persistent chat history stored on backend).
 
-Response example:
+Response:
 ```json
-[
-  {"type": "system", "content": "..."},
-  {"type": "ai", "content": "Hello!"}
-]
+[]
 ```
 
 ## POST /
-Sends a user message. Body:
+Sends conversation messages to the ReAct agent. Body:
 ```json
-{ "prompt": "Hello there" }
+{ 
+  "messages": [
+    {"type": "human", "content": "What's the latest news about AI?"},
+    {"type": "ai", "content": "Previous AI response..."},
+    {"type": "human", "content": "Tell me more about that"}
+  ]
+}
 ```
-Requires header `x-model-id`.
+Requires header `x-model-id` (e.g., `meta-llama/Llama-3.3-70B-Instruct`).
 
-Response: plain text with the assistant's reply.
-
-## POST /init (if enabled)
-Initializes RAG index from a URL.
+Response: Returns the last message from the agent (single message object):
 ```json
-{ "page_url": "https://example.com" }
+{
+  "type": "ai", 
+  "content": "Here's the latest information about AI developments..."
+}
 ```
-Response: JSON with stats (e.g., chunk count).

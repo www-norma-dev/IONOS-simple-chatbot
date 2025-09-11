@@ -32,13 +32,12 @@ pip install -r requirements.txt
 
 ```powershell
 $env:IONOS_API_KEY = "<your_ionos_api_key>"
-# Optional (if using web search):
 $env:TAVILY_API_KEY = "<your_tavily_api_key>"
-# Optional RAG tuning
-$env:RAG_K = "3"
-$env:CHUNK_SIZE = "500"
-$env:MAX_CHUNK_COUNT = "256"
 ```
+
+**Both API keys are required:**
+- **IONOS_API_KEY**: For accessing IONOS AI Models Hub
+- **TAVILY_API_KEY**: For web search functionality (essential for the ReAct agent)
 
 Tip: You can also put these in a `.env` file.
 
