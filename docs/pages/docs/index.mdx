@@ -24,7 +24,7 @@ A full‑stack intelligent agent powered by LangGraph ReAct architecture and ION
 2) Choose a frontend:
 	- [Next.js Setup](/docs/frontend/nextjs/setup)
 	- [Streamlit Overview](/docs/frontend/streamlit)
-3) Send a chat request with header `x-model-id` (e.g., `meta-llama/Llama-3.3-70B-Instruct`).
+3) Send a chat request with header `x-model-id` (e.g., `mistralai/Mistral-Small-24B-Instruct`).
 
 ## How it works
 The client sends messages to FastAPI → the ReAct agent reasons about the request → tools are called dynamically as needed (e.g., `web_search` for real-time information) → the model produces a context-aware final answer.

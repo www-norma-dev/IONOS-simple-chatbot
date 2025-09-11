@@ -59,7 +59,7 @@ Run these from another terminal:
 Invoke-RestMethod `
 	-Uri "http://127.0.0.1:8000/" `
 	-Method Post `
-	-Headers @{ "x-model-id" = "meta-llama/Llama-3.3-70B-Instruct" } `
+	-Headers @{ "x-model-id" = "mistralai/Mistral-Small-24B-Instruct" } `
 	-Body (@{ prompt = "Hello!" } | ConvertTo-Json) `
 	-ContentType "application/json"
 ```
@@ -68,7 +68,7 @@ Invoke-RestMethod `
 
 ```bash
 curl -s -X POST "http://127.0.0.1:8000/" \
-  -H "x-model-id: meta-llama/Llama-3.3-70B-Instruct" \
+  -H "x-model-id: mistralai/Mistral-Small-24B-Instruct" \
   -H "Content-Type: application/json" \
   -d '{"prompt":"Hello!"}'
 ```

@@ -7,25 +7,59 @@ title: Backend API
 Base URL: `http://localhost:8000`
 
 ## Headers
-- `x-model-id`: required. Example: `meta-llama/Llama-3.3-70B-Instruct`.
+- `x-model-id`: required. Example: `mistralai/Mistral-Small-24B-Instruct`.
 
 ## POST /
-Sends conversation messages to the ReAct agent. Body:
+Sends conversation messages to the ReAct agent. 
+
+**Request Body:**
 ```json
-{ 
+{
   "messages": [
-    {"type": "human", "content": "What's the latest news about AI?"},
-    {"type": "ai", "content": "Previous AI response..."},
-    {"type": "human", "content": "Tell me more about that"}
+    {"type": "human", "content": "What's the weather today?"},
+    {"type": "ai", "content": "I'll help you check the weather."},
+    {"type": "human", "content": "Thanks!"}
   ]
 }
 ```
-Requires header `x-model-id` (e.g., `meta-llama/Llama-3.3-70B-Instruct`).
 
-Response: Returns the last message from the agent (single message object):
+**Supported message types:**
+- `"human"`: User messages (requires `content` field)
+- `"ai"`: Assistant messages (requires `content` field)  
+- `"tool"`: Tool messages (requires `content` field, optional `name` field)
+
+**Required Headers:**
+- `x-model-id`: IONOS model identifier (e.g. `mistralai/Mistral-Small-24B-Instruct`)
+
+**Response:**
+Returns the last message from the agent conversation as a LangChain message object.
+
+**Example Response:**
 ```json
 {
-  "type": "ai", 
-  "content": "Here's the latest information about AI developments..."
+    "content": "The weather in Berlin today is characterized by moderate rain with a temperature of 22.2°C (72.0°F). The humidity is 61%, and there is a slight breeze from the WSW at 17.3 km/h (10.7 mph). The sky is partly cloudy with 50% cloud cover. The wind chill feels like 20.0°C (68.0°F), and the heat index is also 20.0°C (68.0°F). The dew point is at 13.6°C (56.6°F), and visibility is good at 10 km (6 miles). The UV index is low at 1.1, and there are gusts of wind reaching up to 25.7 km/h (16.0 mph).",
+    "additional_kwargs": {
+        "refusal": null
+    },
+    "response_metadata": {
+        "token_usage": {
+            "completion_tokens": 181,
+            "prompt_tokens": 1006,
+            "total_tokens": 1187
+        },
+        "model_name": "mistralai/Mistral-Small-24B-Instruct",
+        "finish_reason": "stop"
+    },
+    "type": "ai",
+    "name": null,
+    "id": "run--fa6dbcb0-2c5d-4f12-bd51-4cd6dfefc81f-0",
+    "tool_calls": [],
+    "usage_metadata": {
+        "input_tokens": 1006,
+        "output_tokens": 181,
+        "total_tokens": 1187
+    }
 }
 ```
+
+**Note:** Frontend applications should extract the `content` field for the actual message text. The response includes comprehensive LangChain metadata including token usage, model information, and execution details.
