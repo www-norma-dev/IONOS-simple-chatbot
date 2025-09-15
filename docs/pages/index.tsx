@@ -335,7 +335,7 @@ export default function Home({ stars, contributors }: Props): JSX.Element {
             {/* subtle gradient glow behind the card */}
             <div className="relative !space-y-5">
               <h2 className="text-5xl sm:text-6xl font-extrabold text-gray-900 leading-tight">
-                Ready to launch your intelligent assistant?
+                Build Smarter Agents
               </h2>
               <p className="text-lg sm:text-xl text-gray-600 leading-relaxed">
                 With the IONOS Starter Pack, deploy context-aware, web-connected

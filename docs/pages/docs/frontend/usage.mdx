@@ -1,8 +1,16 @@
 # How to Use the App
 
-1. Go to `http://localhost:3000`
-2. Enter a webpage URL to scrape and index it.
-3. Choose an IONOS AI model.
-4. Start chatting!
+## Streamlit Frontend
+1. Go to `http://localhost:8501`
+2. The app will automatically fetch available IONOS AI models
+3. Select a model from the dropdown in the sidebar
+4. Start chatting with the intelligent agent
+5. The agent will automatically search the web and reason about your requests
 
-The backend handles RAG chunking, retrieval, and conversation history.
+## Next.js Frontend  
+1. Go to `http://localhost:3000`
+2. Select an IONOS AI model from the dropdown
+3. Start chatting with the ReAct agent
+4. Experience real-time web search and context-aware responses
+
+Both frontends handle conversation history locally and send the full message array to the backend for each request. The backend ReAct agent processes the conversation context and returns intelligent responses with dynamic web search capabilities.

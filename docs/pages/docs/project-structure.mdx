@@ -2,12 +2,17 @@
 
 ```text
 IONOS-simple-chatbot/
+├─ .env                             # Environment variables (create from template)
+├─ .env.template                    # Environment template
+├─ .github/                         # GitHub workflows and configurations
+├─ .gitignore                       # Git ignore rules
 ├─ backend/                         # FastAPI service + agent
+│  ├─ .env                          # Backend-specific environment variables
 │  ├─ main.py                       # API entrypoint (GET/POST /)
 │  ├─ chatbot_agent.py              # LangGraph ReAct agent + tools
-│  ├─ requirements.txt
-│  └─ pyproject.toml
-│  
+│  ├─ requirements.txt              # Python dependencies
+│  ├─ Dockerfile                    # Docker container config
+│  └─ Makefile                      # Build automation
 │
 ├─ frontends/
 │  ├─ next-js-starter/              # Next.js app (TypeScript)
@@ -16,7 +21,9 @@ IONOS-simple-chatbot/
 │  │  ├─ lib/                       # Utilities
 │  │  └─ public/                    # Static assets
 │  └─ streamlit-starter/
-│     └─ app.py                     # Streamlit chat UI
+│     ├─ app.py                     # Streamlit chat UI
+│     ├─ requirements.txt           # Python dependencies
+│     └─ Dockerfile                 # Docker container config
 │
 ├─ docs/                            # Nextra/Next.js documentation site
 │  ├─ pages/docs/                   # MDX documentation
@@ -26,13 +33,15 @@ IONOS-simple-chatbot/
 ├─ assets/
 │  └─ images/                       # Repo images (cover.jpg, screenshot.png)
 │
+├─ docker-compose.yml               # Docker Compose configuration
+├─ kubernetes_config.tpl            # Kubernetes deployment template
+├─ pyproject.toml                   # Root Python project metadata
+├─ uv.lock                          # uv lockfile
 ├─ README.md
 ├─ LICENSE
-├─ CODE_OF_CONDUCT.md
-├─ pyproject.toml                    # Root Python project metadata (optional)
-└─ uv.lock                          # uv/poetry lockfile (if used)
+└─ CODE_OF_CONDUCT.md
 ```
 
 Notes
-- The backend can run standalone via `python backend/main.py`.
+- The backend can run standalone via `uvicorn main:app --host 127.0.0.1 --port 8000 --reload` (from backend directory).
 - Frontends are optional; use either Next.js or Streamlit.

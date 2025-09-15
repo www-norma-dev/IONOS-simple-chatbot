@@ -32,20 +32,19 @@ pip install -r requirements.txt
 
 ```powershell
 $env:IONOS_API_KEY = "<your_ionos_api_key>"
-# Optional (if using web search):
 $env:TAVILY_API_KEY = "<your_tavily_api_key>"
-# Optional RAG tuning
-$env:RAG_K = "3"
-$env:CHUNK_SIZE = "500"
-$env:MAX_CHUNK_COUNT = "256"
 ```
+
+**Both API keys are required:**
+- **IONOS_API_KEY**: For accessing IONOS AI Models Hub
+- **TAVILY_API_KEY**: For web search functionality (essential for the ReAct agent)
 
 Tip: You can also put these in a `.env` file.
 
 ## 5. Run the server
 
-```powershell
-python .\main.py
+```bash
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 The API will be available at `http://localhost:8000`.
@@ -60,8 +59,8 @@ Run these from another terminal:
 Invoke-RestMethod `
 	-Uri "http://127.0.0.1:8000/" `
 	-Method Post `
-	-Headers @{ "x-model-id" = "meta-llama/Llama-3.3-70B-Instruct" } `
-	-Body (@{ prompt = "Hello!" } | ConvertTo-Json) `
+	-Headers @{ "x-model-id" = "mistralai/Mistral-Small-24B-Instruct" } `
+	-Body (@{ messages = @(@{ type = "human"; content = "Hello!" }) } | ConvertTo-Json -Depth 3) `
 	-ContentType "application/json"
 ```
 
@@ -69,7 +68,7 @@ Invoke-RestMethod `
 
 ```bash
 curl -s -X POST "http://127.0.0.1:8000/" \
-  -H "x-model-id: meta-llama/Llama-3.3-70B-Instruct" \
+  -H "x-model-id: mistralai/Mistral-Small-24B-Instruct" \
   -H "Content-Type: application/json" \
-  -d '{"prompt":"Hello!"}'
+  -d '{"messages":[{"type":"human","content":"Hello!"}]}'
 ```

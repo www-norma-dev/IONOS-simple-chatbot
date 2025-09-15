@@ -8,7 +8,7 @@ title: Troubleshooting
 Set a default user agent before making web requests:
 
 ```powershell
-$env:USER_AGENT = "IONOS-RAG-Chatbot/1.0"
+$env:USER_AGENT = "IONOS-Agent-Starter/1.0"
 ```
 
 ## ImportError: attempted relative import with no known parent package
@@ -21,7 +21,7 @@ from chatbot_agent import create_chatbot_agent
 And run from the backend folder:
 
 ```powershell
-python .\main.py
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ## Missing x-model-id header

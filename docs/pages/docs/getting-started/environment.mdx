@@ -12,18 +12,11 @@ NEXT_PUBLIC_APP_BASE_URL=http://localhost:8000
 
 ```dotenv
 IONOS_API_KEY=your_ionos_api_key_here
-# Optional (only if using RAG + web search tools)
 TAVILY_API_KEY=your_tavily_api_key_here
-RAG_K=3
-CHUNK_SIZE=500
-MAX_CHUNK_COUNT=256
 ```
 
 ### Variable Description
 
 - **NEXT_PUBLIC_APP_BASE_URL**: URL of the backend for API calls.
-- **IONOS_API_KEY**: Secret key for IONOS models.
-- **TAVILY_API_KEY**: API key for Tavily web search tool.
-- **RAG_K**: Number of top chunks for retrieval.
-- **CHUNK_SIZE**: Max characters per chunk.
-- **MAX_CHUNK_COUNT**: Total chunks to index.
+- **IONOS_API_KEY**: Secret key for IONOS AI Models Hub access (required).
+- **TAVILY_API_KEY**: API key for Tavily real-time web search tool (required for agent functionality).
