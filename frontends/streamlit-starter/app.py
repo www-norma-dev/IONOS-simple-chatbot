@@ -44,7 +44,7 @@ def fetch_model_ids():
         st.sidebar.error(f"Error fetching models: {e}")
         return []
 
-MODEL_OPTIONS = fetch_model_ids() or ["meta‑llama/Meta‑Llama‑3.1‑8B‑Instruct"]
+MODEL_OPTIONS = fetch_model_ids() or ["mistralai/Mistral-Small-24B-Instruct"]
 model = st.sidebar.selectbox("Model", MODEL_OPTIONS, key="model_select")
 
 st.sidebar.markdown("---")
