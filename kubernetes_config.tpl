@@ -64,6 +64,12 @@ spec:
         image: ${FRONTEND_IMAGE}
         ports:
         - containerPort: 8501
+        env:
+          - name: IONOS_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: secrets
+                key: IONOS_API_KEY
 ---
 apiVersion: v1
 kind: Service

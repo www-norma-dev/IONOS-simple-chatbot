@@ -8,6 +8,8 @@ services:
       - webnet
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - IONOS_API_KEY=${IONOS_API_KEY}
       - TAVILY_API_KEY=${TAVILY_API_KEY}
@@ -19,6 +21,10 @@ services:
       - webnet
     ports:
       - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - IONOS_API_KEY=${IONOS_API_KEY}
 
 networks:
   webnet:
