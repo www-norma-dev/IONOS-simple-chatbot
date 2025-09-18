@@ -97,15 +97,11 @@ if send_btn and user_message.strip():
                 headers={"x-model-id": model},
             )
             if resp.ok:
-                # Parse backend response
+                # Parse backend response (backend always returns a single message dict)
                 data = resp.json() if resp.headers.get('content-type','').startswith('application/json') else {"type": "ai", "content": resp.text}
-                # If the response is a list of messages, append all
-                if isinstance(data, list):
-                    for msg in data:
-                        st.session_state["chat_history"].append(msg)
-                # If the response is a single message
-                elif isinstance(data, dict):
-                    # Handle tool messages
+                if not isinstance(data, dict):
+                    st.error("Unexpected response shape from backend (expected object)")
+                else:
                     if data.get("type") == "tool":
                         st.session_state["chat_history"].append({
                             "type": "tool",
