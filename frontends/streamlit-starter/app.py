@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Backend API configuration
-BACKEND_URL = "http://localhost:8000"
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 # Configure Streamlit page settings
 st.set_page_config(page_title="IONOS Chatbot", page_icon="💬", layout="wide")
