@@ -79,6 +79,8 @@ kubectl get nodes
 
 You should see at least one Ready node.
 
+Note: This kubeconfig file is the one you will paste into the KUBE_CONFIG GitHub secret later (see CI/CD secrets).
+
 ---
 
 ## 3) Create runtime Secret (secrets)
@@ -176,10 +178,11 @@ The workflow runs when you push a semantic tag such as 0.1.5.
 ### 5.1 Required Repository Variables (Settings → Variables → Repository variables)
 - `IMAGE_REGISTRY` = `chatbot-registry.cr.de-fra.ionos.com/starter-pack`
 
+<a id="ci-secrets"></a>
 ### 5.2 Required Secrets (Settings → Secrets → Actions)
 - `DOCKER_USERNAME` = your registry username, for example `chatbot`
 - `DOCKER_PASSWORD` = `&lt;YOUR_IONOS_REGISTRY_ACCESS_TOKEN&gt;`
-- `KUBE_CONFIG` = `&lt;contents of kubeconfig.yaml&gt;`
+- `KUBE_CONFIG` = paste the full contents of the kubeconfig.yaml you downloaded in step 2 (do not commit this file to the repo)
 - `IONOS_API_KEY` = `&lt;runtime API key&gt;`
 - `TAVILY_API_KEY` = `&lt;runtime API key&gt;`
 
