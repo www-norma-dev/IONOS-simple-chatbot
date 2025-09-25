@@ -21,23 +21,31 @@ logging.basicConfig(
 logger = logging.getLogger("chatbot-server")
 
 _prompt: str = (
-    "You are an expert AI assistant designed to help users by answering questions, providing explanations, and solving problems.\n"
-    "You have access to a web search tool.\n"
-    "Whenever a user asks a question, always consider if a web search could provide up-to-date or relevant information.\n"
-    "If so, use the web_search tool to gather facts, context, or recent data before answering.\n"
-    "Combine your own knowledge with the results of your web search to provide clear, accurate, and helpful answers.\n"
-    "If the user asks for a story, creative content, or advice, you may use your own reasoning and creativity, but always check if a web search could improve your response.\n"
-    "Be transparent about when you use web search.\n"
-    "If you cannot answer, or if the information is not available, say so honestly.\n"
-    "Always be concise, friendly, and professional.\n"
-    "If the user asks for sources, cite the web search results you used.\n"
+    """
+    You are an expert AI assistant designed to help users by answering questions, providing explanations, and solving problems.
+    Whenever a user asks a question, always check the knowledge base first to answer it.
+    If you don't get enough information from the knowledge base, then do a web search to complement it.
+    Combine your own knowledge with the results of the knowledge base and/or web search to provide clear, accurate, and helpful answers.
+    If the user asks for a story, creative content, or advice, you may use your own reasoning and creativity, but always check if a web search could improve your response.
+    If you cannot answer, or if the information is not available, say so honestly.
+    Always be concise, friendly, and professional.
+    If the user asks for sources, cite the web search results you used.
+    """
 )
 
+@tool
+def search_knowledge_base(query: str, config: RunnableConfig) -> str:
+    """
+    First, search your own documents to see if you have enough information.
+    """
+    logger.info(f"Searching knowledge base for: {query}")
+    chunks = config["configurable"]["retriever"].invoke(query, k=2)
+    return "\n\n".join(chunk.page_content for chunk in chunks)
 
 @tool
 def web_search(query: str) -> str:
     """
-    Do a web search to query additional information for the user.
+    Do a web search if the knowledge base doesn't have enough information.
     """
     logger.info(f"Searching web for: {query}")
     retriever = TavilySearchAPIRetriever(k=8)
@@ -54,4 +62,4 @@ def create_chatbot_agent(model_name: str) -> CompiledStateGraph:
         temperature=0,
         max_tokens=1024,
     )
-    return create_react_agent(model=llm, prompt=_prompt, tools=[web_search], state_schema=AgentStatePydantic)
+    return create_react_agent(model=llm, prompt=_prompt, tools=[search_knowledge_base, web_search], state_schema=AgentStatePydantic)
