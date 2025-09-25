@@ -1,6 +1,8 @@
 import logging
+from typing import Optional
+from pathlib import Path
 
- 
+from langchain_community.retrievers import TFIDFRetriever
 from langchain_core.messages import (
     HumanMessage,
     AIMessage, filter_messages,
@@ -9,13 +11,13 @@ from langchain_core.messages import (
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.runnables import RunnableConfig
- 
-from langgraph.graph.state import CompiledStateGraph
+from langchain_text_splitters import (
+    RecursiveCharacterTextSplitter,
+)
+
 from langgraph.prebuilt.chat_agent_executor import AgentStatePydantic
 from pydantic import BaseModel
 from mangum import Mangum
-
-from typing import Optional
 
 from chatbot_agent import create_chatbot_agent
 
@@ -26,6 +28,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("chatbot-server")
 
+_kb_text = Path("knowledge_base.txt").read_text(encoding="utf-8")
+chunks = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50).split_text(_kb_text)
+retriever: TFIDFRetriever = TFIDFRetriever.from_texts(chunks)
 
 # ─── REQUEST MODELS ───────────────────────────────────────────────────
 class NewChatRequest(BaseModel):
@@ -54,20 +59,12 @@ app.add_middleware(
     max_age=3600,
 )
 
-
- 
-
-
-
-
-
 # ─── Chat endpoints ─────────────────────────────────────────────────────
 @app.get("/")
 async def get_chat_logs():
     logger.info("Received GET /; returning chat_log")
     # No chat log stored on backend anymore
     return []
-
 
 @app.post("/")
 async def chat(request: Request):
@@ -94,7 +91,7 @@ async def chat(request: Request):
         return state_messages
     state_messages = build_state_messages(messages)
     state = AgentStatePydantic(messages=state_messages)
-    result = agent.invoke(input=state, config=RunnableConfig())
+    result = agent.invoke(input=state, config=RunnableConfig(configurable={'retriever': retriever}))
     state = AgentStatePydantic.model_validate(result)
     # Keep chat log manageable (last 20 messages)
     if len(state.messages) > 20:
