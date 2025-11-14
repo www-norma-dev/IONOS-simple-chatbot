@@ -18,6 +18,7 @@ from mangum import Mangum
 from typing import Optional
 
 from chatbot_agent import create_chatbot_agent
+from studio_client import studio_call
 
 # ─── Logging setup ───────────────────────────────────────────────────────
 logging.basicConfig(
@@ -69,16 +70,45 @@ async def get_chat_logs():
     return []
 
 
+@app.get("/studio/models")
+async def get_studio_models():
+    """Return available fine-tuned Studio models from env."""
+    import os
+    models = {
+        "qwen-gdpr": os.getenv("STUDIO_MODEL_QWEN_GDPR"),
+        "granite-gdpr": os.getenv("STUDIO_MODEL_GRANITE_GDPR"),
+        "qwen3-sharegpt": os.getenv("STUDIO_QWEN3_SHAREGPT"),
+        "Qwen3-customersupport": os.getenv("STUDIO_QWEN3_customersupport"),
+    }
+    # Filter out None values
+    return {k: v for k, v in models.items() if v}
+
+
 @app.post("/")
 async def chat(request: Request):
     data = await request.json()
     messages = data.get("messages", [])
-    logger.info(f"Injecting messages into agent state: {messages}")
+    logger.info(f"Received {len(messages)} messages")
     model_id = request.headers.get("x-model-id")
     logger.info(f"Received x-model-id header: {model_id}")
     if not model_id:
         raise HTTPException(status_code=400, detail="Missing x-model-id header")
-    # Create agent and state from scratch for each request
+    
+    # Keep chat log manageable (last 50 messages)
+    if len(messages) > 50:
+        messages = messages[-50:]
+    
+    # --- Route to Studio if model_id starts with "studio:" ---
+    if model_id.startswith("studio:"):
+        studio_model_id = model_id.split("studio:", 1)[1].strip()
+        try:
+            text = studio_call(studio_model_id, messages)
+            return {"type": "ai", "content": text}
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=str(e))
+    
+    # --- Otherwise use existing IONOS Hub agent ---
+    logger.info(f"Routing to IONOS Hub model: {model_id}")
     agent = create_chatbot_agent(model_id)
     def build_state_messages(msgs):
         state_messages = []
@@ -96,9 +126,6 @@ async def chat(request: Request):
     state = AgentStatePydantic(messages=state_messages)
     result = agent.invoke(input=state, config=RunnableConfig())
     state = AgentStatePydantic.model_validate(result)
-    # Keep chat log manageable (last 20 messages)
-    if len(state.messages) > 20:
-        state.messages = state.messages[-20:]
     return state.messages[-1]
 
 
