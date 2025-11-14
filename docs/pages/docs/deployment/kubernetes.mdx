@@ -1,60 +1,242 @@
-# Kubernetes Deployment
+---
+title: Kubernetes Deployment (IONOS)
+description: End-to-end, battle-tested deployment guide for the IONOS simple-chatbot on Managed K8s + IONOS Container Registry, with CI/CD via GitHub Actions. Includes quick verification at each stage.
+---
 
-This page covers Kubernetes-specific concepts: manifest templating, secrets, obtaining kubeconfig from IONOS Cloud, verifying, rollback, and cleanup.
+# Kubernetes Deployment (IONOS)
 
-## Manifest Templating
-The file `kubernetes_config.tpl` contains `${BACKEND_IMAGE}` and `${FRONTEND_IMAGE}` placeholders. During CI the workflow exports these env vars and runs:
+Deploy the backend and Streamlit frontend to IONOS Managed Kubernetes. Images are hosted in IONOS Container Registry and rollouts are triggered by GitHub Actions tags. Each step includes a quick verification command.
+
+> Scope
+>
+> - Cluster: IONOS Managed Kubernetes
+> - Registry: IONOS Container Registry (`*.cr.de-fra.ionos.com`)
+> - CI/CD: GitHub Actions (triggered by semantic tags like `0.1.5`)
+> - App: `backend` (FastAPI) + `streamlit` frontend
+> - Namespace: `default`
+
+---
+
+## 0) Prerequisites
+
+Create or sign in to your IONOS Cloud account: https://dcd.ionos.com/
+
+Install the CLI tools on macOS or Windows:
+
+macOS (Homebrew)
 ```bash
-envsubst < kubernetes_config.tpl > kubernetes_config.yaml
-```
-So the resulting applied file references the exact immutable image tags from the release tag.
-
-### Snippet
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: backend
-spec:
-  template:
-    spec:
-      containers:
-      - name: backend
-        image: ${BACKEND_IMAGE}  # substituted in CI
+brew install kubernetes-cli
+brew tap ionos-cloud/homebrew-ionos-cloud
+brew install ionosctl
 ```
 
-## Secrets
-Runtime API keys are injected via a recreated generic secret `secrets`:
+Windows
+```powershell
+# kubectl via winget (PowerShell as Admin)
+winget install Kubernetes.kubectl
+
+# ionosctl: download Windows release and add ionosctl.exe to PATH
+# See: https://github.com/ionos-cloud/ionosctl/releases
+```
+
+Quick sanity:
+
 ```bash
-kubectl delete secret secrets --ignore-not-found
-kubectl create secret generic secrets \
-  --from-literal=IONOS_API_KEY=*** \
-  --from-literal=TAVILY_API_KEY=***
+kubectl version --client
+ionosctl version
 ```
-Deployments reference them with `valueFrom.secretKeyRef`.
 
-## Obtaining kubeconfig from IONOS Cloud
-You need the kubeconfig file to let both local `kubectl` and CI access the cluster.
+---
 
-### Console Steps
-1. Sign in to the IONOS Cloud Console (dashboard home).
-2. In the left sidebar click **Containers**.
-3. Click **Managed Kubernetes**.
-4. Select your cluster (e.g. `ionos-chatbot-starter-pack`).
-5. In the Cluster Settings view click the download button next to **kubeconfig.yaml**.
-6. Save the file securely (e.g., `~/kube/cluster-admin.yaml`).
-7. (Optional) Review / redact before storing as a secret.
+## 1) Access & Secrets You Need (before you begin)
 
-### Steps to get your KubeConfig from IONOS Cloud:
-Step 1:
-![Dashboard Home – landing](/assets/kubernetes/dashboard.jpg)
-Step 2:
-![Containers Menu – select Managed Kubernetes](/assets/kubernetes/containers-menu.jpg)
-Step 3:
-![Cluster Settings – download kubeconfig.yaml](/assets/kubernetes/download.jpg)
+You need three independent things ready:
 
-## Add kubeconfig as GitHub Secret
-1. Open the file → copy all contents.
-2. GitHub: Settings → Secrets and variables → Actions → New repository secret.
-3. Name: `KUBE_CONFIG`.
-4. Paste → Save.
+1) Kubeconfig (from IONOS UI) — for both local kubectl and CI
+2) IONOS Container Registry credentials — a registry user, for example `chatbot`, and a generated access token
+3) Runtime API keys used by the app (created as a Kubernetes Secret):
+- IONOS_API_KEY 
+- TAVILY_API_KEY 
+
+
+---
+
+## 2) Download kubeconfig from IONOS
+
+IONOS Console → Containers → Managed Kubernetes → open your cluster → Cluster Settings → Download kubeconfig.yaml.
+
+Screenshot (where to download kubeconfig in Kubernetes Manager):
+
+![Download kubeconfig from Cluster Settings](/assets/kubernetes/config.jpg)
+
+Move the downloaded kubeconfig.yaml file into your repository root (for example, drag it from your Downloads folder into the project’s top-level folder).
+
+From your terminal, verify cluster connectivity:
+```bash
+kubectl cluster-info
+kubectl get nodes
+```
+
+You should see at least one Ready node.
+
+Note: This kubeconfig file is the one you will paste into the KUBE_CONFIG GitHub secret later (see CI/CD secrets).
+
+---
+
+## 3) Create runtime Secret (secrets)
+
+In your terminal, create the secrets object in the default namespace. If it already exists, recreate it:
+```bash
+kubectl delete secret secrets -n default --ignore-not-found
+
+# Set your real keys (no angle brackets)
+kubectl create secret generic secrets -n default \
+  --from-literal=IONOS_API_KEY="YOUR_IONOS_API_KEY" \
+  --from-literal=TAVILY_API_KEY="YOUR_TAVILY_API_KEY"
+```
+
+Now check that the secret exists and includes both keys:
+
+```bash
+kubectl get secret secrets -n default
+kubectl get secret secrets -n default -o jsonpath='{.data.IONOS_API_KEY}' | base64 --decode && echo
+kubectl get secret secrets -n default -o jsonpath='{.data.TAVILY_API_KEY}' | base64 --decode && echo
+```
+
+Later verification inside running Pods
+After rollout, you can confirm the app sees the env vars:
+
+```bash
+# streamlit
+SPOD=$(kubectl get pods -n default -l app=streamlit -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n default "$SPOD" -- env | grep -E 'IONOS|TAVILY|OPENAI|BASE_URL' || true
+
+# backend
+BPOD=$(kubectl get pods -n default -l app=backend -o jsonpath='{.items[0].metadata.name}')
+```
+
+---
+
+## 4) IONOS Container Registry: credentials for Kubernetes pulls
+
+### 4.1 Create a registry pull secret in Kubernetes
+
+In the Container Registry, create your registry (for example, `chatbot-registry`) or select an existing one. Then generate an access token for your registry user (for example, `chatbot`).
+
+Screenshots:
+
+1) Open Containers → Container Registry option
+
+![Containers section – open Container Registry](/assets/kubernetes/container.png)
+
+2) Create or select a registry. Example: chatbot-registry
+![Create or select a registry](/assets/kubernetes/Registry.png)
+
+3) Create a token. Example username: chatbot
+
+![Create a token for your registry user](/assets/kubernetes/token.png)
+
+Create the Kubernetes pull secret:
+
+```bash
+# Create docker-registry secret in K8s (namespace: default)
+kubectl create secret docker-registry regcred -n default \
+  --docker-server="chatbot-registry.cr.de-fra.ionos.com" \
+  --docker-username="chatbot" \
+  --docker-password="YOUR_IONOS_REGISTRY_ACCESS_TOKEN"
+```
+
+Confirm the secret was created:
+```bash
+kubectl get secret regcred -n default
+```
+<a id="pull-secret"></a>
+### 4.2 Make Deployments use the pull secret
+Patch the existing deployments now (or declare this in the manifest):
+
+```bash
+kubectl patch deploy backend -n default --type merge -p \
+'{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"regcred"}]}}}}'
+kubectl patch deploy streamlit -n default --type merge -p \
+'{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"regcred"}]}}}}'
+```
+
+Verify:
+
+```bash
+kubectl get deploy backend -n default -o jsonpath='{.spec.template.spec.imagePullSecrets[*].name}'; echo
+kubectl get deploy streamlit -n default -o jsonpath='{.spec.template.spec.imagePullSecrets[*].name}'; echo
+# expect: regcred
+```
+
+---
+
+## 5) CI/CD with GitHub Actions (tags trigger build & deploy)
+
+The workflow runs when you push a semantic tag such as 0.1.5.
+
+### 5.1 Required Repository Variables (Settings → Variables → Repository variables)
+- `IMAGE_REGISTRY` = `chatbot-registry.cr.de-fra.ionos.com/starter-pack`
+
+<a id="ci-secrets"></a>
+### 5.2 Required Secrets (Settings → Secrets → Actions)
+- `DOCKER_USERNAME` = your registry username, for example `chatbot`
+- `DOCKER_PASSWORD` = `&lt;YOUR_IONOS_REGISTRY_ACCESS_TOKEN&gt;`
+- `KUBE_CONFIG` = paste the full contents of the kubeconfig.yaml you downloaded in step 2 (do not commit this file to the repo)
+- `IONOS_API_KEY` = `&lt;runtime API key&gt;`
+- `TAVILY_API_KEY` = `&lt;runtime API key&gt;`
+
+
+
+### 5.3 Trigger a deployment
+
+From your local repo at the commit you want to deploy:
+
+```bash
+git checkout main
+git pull origin main
+
+git tag 0.1.5
+git push origin 0.1.5
+```
+
+Monitor GitHub → Actions → latest run for tag `0.1.5`.
+
+Confirm the cluster is running the new tag:
+
+```bash
+kubectl get deploy backend   -n default -o jsonpath='{.spec.template.spec.containers[0].image}'; echo
+kubectl get deploy streamlit -n default -o jsonpath='{.spec.template.spec.containers[0].image}'; echo
+# expect:
+# chatbot-registry.cr.de-fra.ionos.com/starter-pack/backend:0.1.5
+# chatbot-registry.cr.de-fra.ionos.com/starter-pack/frontend:0.1.5
+```
+
+---
+
+## 6) Services & endpoints
+
+List service external IPs:
+
+```bash
+kubectl get svc -n default
+# Example:
+# NAME                TYPE           EXTERNAL-IP       PORT(S)
+# backend-service     LoadBalancer   212.132.123.219   8000:32425/TCP
+# streamlit-service   LoadBalancer   85.215.220.90     8501:32728/TCP
+```
+
+Open:
+- Backend: http://&lt;backend EXTERNAL-IP&gt;:8000
+- Frontend: http://&lt;streamlit EXTERNAL-IP&gt;:8501
+
+---
+
+## 7) What must be true at the end
+
+- `kubectl get deploy -A` shows backend and streamlit AVAILABLE=1
+- `kubectl get svc -n default` shows EXTERNAL-IP for both services
+- `kubectl get deploy ... -o jsonpath='{.spec.template.spec.containers[0].image}'` shows your new tag, for example `:0.1.5`
+- `kubectl exec ... -- env` in both pods shows IONOS_API_KEY (and other required env vars)
+
+---
