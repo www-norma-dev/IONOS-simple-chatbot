@@ -4,10 +4,24 @@ IONOS AI Model Studio client for fine-tuned models.
 Uses cookie auth (factory_session) or API key when available.
 """
 import os, time, httpx
+from uuid import UUID
 
 BASE = os.getenv("STUDIO_BASE", "https://studio.ionos.de/api/v1")
 ORG = os.getenv("STUDIO_ORG_ID")
 KEY = os.getenv("STUDIO_API_KEY")
+
+def is_studio_model(model_id: str) -> bool:
+    """
+    Detect Studio fine-tuned models by UUID format.
+    
+    Returns True if model_id is a valid UUID (Studio fine-tuned models),
+    False otherwise.
+    """
+    try:
+        UUID(model_id)
+        return True
+    except (ValueError, AttributeError):
+        return False
 
 def studio_call(model_id: str, messages: list) -> str:
     """Single function: convert messages, create job, poll result."""

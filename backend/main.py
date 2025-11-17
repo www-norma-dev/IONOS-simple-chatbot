@@ -18,7 +18,7 @@ from mangum import Mangum
 from typing import Optional
 
 from chatbot_agent import create_chatbot_agent
-from studio_client import studio_call
+from studio_client import studio_call, is_studio_model
 
 # ─── Logging setup ───────────────────────────────────────────────────────
 logging.basicConfig(
@@ -98,17 +98,17 @@ async def chat(request: Request):
     if len(messages) > 50:
         messages = messages[-50:]
     
-    # --- Route to Studio if model_id starts with "studio:" ---
-    if model_id.startswith("studio:"):
-        studio_model_id = model_id.split("studio:", 1)[1].strip()
+    # Route to Studio or Hub based on model ID format
+    if is_studio_model(model_id):
+        logger.info(f"Routing to IONOS Studio: {model_id}")
         try:
-            text = studio_call(studio_model_id, messages)
+            text = studio_call(model_id, messages)
             return {"type": "ai", "content": text}
         except Exception as e:
             raise HTTPException(status_code=502, detail=str(e))
     
-    # --- Otherwise use existing IONOS Hub agent ---
-    logger.info(f"Routing to IONOS Hub model: {model_id}")
+    # Hub inference model
+    logger.info(f"Routing to IONOS Hub: {model_id}")
     agent = create_chatbot_agent(model_id)
     def build_state_messages(msgs):
         state_messages = []

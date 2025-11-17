@@ -302,8 +302,7 @@ else:  # Fine-tuned
             key="finetuned_select",
             index=0
         )
-        model_id = finetuned_models[selected_name]
-        model = f"studio:{model_id}"  # Prefix for backend routing
+        model = finetuned_models[selected_name]  # Studio model UUID
 
 st.sidebar.markdown("---")
 
