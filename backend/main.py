@@ -1,5 +1,6 @@
 import logging
 
+
  
 from langchain_core.messages import (
     HumanMessage,
@@ -8,6 +9,7 @@ from langchain_core.messages import (
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from langchain_core.runnables import RunnableConfig
  
 from langgraph.graph.state import CompiledStateGraph
@@ -19,6 +21,8 @@ from typing import Optional
 
 from chatbot_agent import create_chatbot_agent
 from studio_client import studio_call, is_studio_model
+import json
+import os
 
 # ─── Logging setup ───────────────────────────────────────────────────────
 logging.basicConfig(
@@ -29,9 +33,9 @@ logger = logging.getLogger("chatbot-server")
 
 
 # ─── REQUEST MODELS ───────────────────────────────────────────────────
+
 class NewChatRequest(BaseModel):
     page_url: str
-
 
 class UserMessage(BaseModel):
     prompt: str
@@ -55,17 +59,11 @@ app.add_middleware(
     max_age=3600,
 )
 
-
  
-
-
-
-
-
 # ─── Chat endpoints ─────────────────────────────────────────────────────
+
 @app.get("/")
 async def get_chat_logs():
-    logger.info("Received GET /; returning chat_log")
     # No chat log stored on backend anymore
     return []
 
@@ -88,9 +86,10 @@ async def get_studio_models():
 async def chat(request: Request):
     data = await request.json()
     messages = data.get("messages", [])
-    logger.info(f"Received {len(messages)} messages")
+    stream = request.query_params.get("stream") == "true"
+    
     model_id = request.headers.get("x-model-id")
-    logger.info(f"Received x-model-id header: {model_id}")
+    
     if not model_id:
         raise HTTPException(status_code=400, detail="Missing x-model-id header")
     
@@ -100,7 +99,8 @@ async def chat(request: Request):
     
     # Route to Studio or Hub based on model ID format
     if is_studio_model(model_id):
-        logger.info(f"Routing to IONOS Studio: {model_id}")
+        if stream:
+            raise HTTPException(status_code=400, detail="Studio models do not support streaming")
         try:
             text = studio_call(model_id, messages)
             return {"type": "ai", "content": text}
@@ -108,8 +108,33 @@ async def chat(request: Request):
             raise HTTPException(status_code=502, detail=str(e))
     
     # Hub inference model
-    logger.info(f"Routing to IONOS Hub: {model_id}")
+    is_reasoning_model = "gpt-oss" in model_id.lower() or "o1" in model_id.lower()
+    
+    if is_reasoning_model:
+        # Direct API call for reasoning models (no tools)
+        from openai import OpenAI
+        client = OpenAI(base_url="https://openai.inference.de-txl.ionos.com/v1", api_key=os.getenv("IONOS_API_KEY"))
+        openai_msgs = [{"role": "user" if m["type"] in ("human", "user") else "assistant", "content": m["content"]}
+                       for m in messages if m["type"] in ("human", "user", "ai", "assistant")]
+        
+        if stream:
+            def generate():
+                yield f"data: {json.dumps({'status': 'thinking'})}\n\n"
+                try:
+                    for chunk in client.chat.completions.create(model=model_id, messages=openai_msgs, stream=True, max_tokens=2048):
+                        if chunk.choices[0].delta.content:
+                            yield f"data: {json.dumps({'content': chunk.choices[0].delta.content})}\n\n"
+                    yield "data: [DONE]\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            return StreamingResponse(generate(), media_type="text/event-stream")
+        
+        response = client.chat.completions.create(model=model_id, messages=openai_msgs, max_tokens=2048)
+        return {"type": "ai", "content": response.choices[0].message.content}
+    
+    # Regular models - use agent for web search
     agent = create_chatbot_agent(model_id)
+    
     def build_state_messages(msgs):
         state_messages = []
         for m in msgs:
@@ -122,7 +147,29 @@ async def chat(request: Request):
             else:
                 state_messages.append(m)
         return state_messages
+    
     state_messages = build_state_messages(messages)
+    
+    if stream:
+        def generate():
+            yield f"data: {json.dumps({'status': 'thinking'})}\n\n"
+            try:
+                result = AgentStatePydantic.model_validate(
+                    agent.invoke(input=AgentStatePydantic(messages=state_messages), config=RunnableConfig())
+                )
+                content = result.messages[-1].content if result.messages else ""
+                
+                # Stream response smoothly
+                import time
+                for i in range(0, len(content), 5):
+                    yield f"data: {json.dumps({'content': content[i:i+5]})}\n\n"
+                    time.sleep(0.01)
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        return StreamingResponse(generate(), media_type="text/event-stream")
+    
+    # Non-streaming
     state = AgentStatePydantic(messages=state_messages)
     result = agent.invoke(input=state, config=RunnableConfig())
     state = AgentStatePydantic.model_validate(result)
@@ -134,4 +181,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
-

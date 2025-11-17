@@ -13,9 +13,16 @@ import streamlit as st
 import requests
 import time
 import os
+import json
 from dotenv import load_dotenv
+import re
 
 load_dotenv()
+
+# Helper to clean leading markdown headers
+def clean_leading_headers(text):
+    """Remove leading ## or ### from text start"""
+    return re.sub(r'^#+\s*', '', text.strip())
 
 # Backend API configuration
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend-service:8000")
@@ -138,6 +145,19 @@ st.markdown("""
             opacity: 1;
             transform: translateY(0);
         }
+    }
+    
+    /* Animated dots for thinking indicator */
+    .thinking-dots::after {
+        content: '';
+        animation: dots 1.5s steps(4, end) infinite;
+    }
+    
+    @keyframes dots {
+        0%, 20% { content: ''; }
+        40% { content: '.'; }
+        60% { content: '..'; }
+        80%, 100% { content: '...'; }
     }
     
     .user-message {
@@ -269,7 +289,7 @@ def fetch_inference_models():
         return ["mistralai/Mistral-Small-24B-Instruct"]
 
 # Fine-tuned Models (Studio) - fetch from backend
-@st.cache_data(ttl=1)  # Refresh each second
+@st.cache_data(ttl=1)
 def fetch_finetuned_models():
     """Fetch available fine-tuned models from backend."""
     try:
@@ -282,13 +302,20 @@ def fetch_finetuned_models():
 
 if model_type == "Inference":
     inference_models = fetch_inference_models()
+    # Preselect gpt-oss-120b if available
+    default_index = 0
+    try:
+        default_index = inference_models.index("openai/gpt-oss-120b")
+    except (ValueError, AttributeError):
+        pass
+    
     selected_model = st.sidebar.selectbox(
         "Select Model:",
         options=inference_models,
         key="inference_select",
-        index=0
+        index=default_index
     )
-    model = selected_model  # we use teh AI model hub from ionos
+    model = selected_model
 else:  # Fine-tuned
     finetuned_models = fetch_finetuned_models()
     finetuned_names = list(finetuned_models.keys())
@@ -306,23 +333,31 @@ else:  # Fine-tuned
 
 st.sidebar.markdown("---")
 
+# Streaming toggle (only for inference models)
+enable_streaming = model_type == "Inference" and st.sidebar.checkbox("⚡ Enable Streaming", value=True, help="Stream responses token-by-token (web search still works)")
+
+st.sidebar.markdown("---")
+
 # --- Main Chat Interface ---
 st.title("IONOS Starter Pack")
 
 # Initialize chat history in frontend only
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
+if "processing" not in st.session_state:
+    st.session_state["processing"] = False
 
-# Display chat messages with modern styling
+# Chat messages area
 st.markdown("<div class='conversation-header'><h4>💬 Conversation</h4></div>", unsafe_allow_html=True)
 
-chat_container = st.container()
-with chat_container:
+# Container for chat messages
+messages_container = st.container()
+
+with messages_container:
     for msg in st.session_state["chat_history"]:
         if msg["type"] == "human":
             st.markdown(
                 f"""<div class='chat-message user-message'>
-                    <div class='message-label'>🧑‍💻 You</div>
                     <div class='message-content'>{msg['content']}</div>
                 </div>""", 
                 unsafe_allow_html=True
@@ -330,32 +365,101 @@ with chat_container:
         elif msg["type"] == "ai":
             st.markdown(
                 f"""<div class='chat-message bot-message'>
-                    <div class='message-label'>🤖 AI Assistant</div>
-                    <div class='message-content'>{msg['content']}</div>
+                    <div class='message-content'>{clean_leading_headers(msg['content'])}</div>
                 </div>""", 
                 unsafe_allow_html=True
             )
 
-# --- Chat Input Form ---
-with st.form("chat_form", clear_on_submit=True):
-    user_message = st.text_input("Type your message...", key="user_message", placeholder="Ask me anything...")
-    send_btn = st.form_submit_button("Send Message", use_container_width=True)
+# Spacer
+st.markdown("<br>", unsafe_allow_html=True)
 
-# Handel message submission
+# --- Chat Input ---
+if st.session_state.get("waiting_for_response", False):
+    st.markdown("""
+    <style>
+        div[data-testid="stForm"] { display: none !important; }
+    </style>
+    """, unsafe_allow_html=True)
+    send_btn = False
+    user_message = ""
+else:
+    input_container = st.container()
+    with input_container:
+        with st.form("chat_form", clear_on_submit=True):
+            user_message = st.text_input("", key="user_message", placeholder="Ask anything...", label_visibility="collapsed")
+            send_btn = st.form_submit_button("Send", use_container_width=True)
+
+# Handle message submission
 if send_btn and user_message.strip():
-    # Add user message to chat history immediately 
+    # Add user message to chat history
     st.session_state["chat_history"].append({"type": "human", "content": user_message})
-    # avoiding to send an empty messages array
-    messages_to_send = st.session_state["chat_history"] if st.session_state["chat_history"] else [{"type": "human", "content": user_message}]
-    with st.spinner("AI is thinking..."):
+    st.session_state["waiting_for_response"] = True
+    st.rerun()
+
+# If waiting for response, make API call
+if st.session_state.get("waiting_for_response", False):
+    st.session_state["waiting_for_response"] = False
+    messages_to_send = st.session_state["chat_history"]
+    
+    # Create placeholder inside messages container 
+    with messages_container:
+        response_placeholder = st.empty()
+    
+    if enable_streaming:
+        # Streaming mode
         try:
+            full_response = ""
+            thinking = False
+            
+            resp = requests.post(f"{BACKEND_URL}/?stream=true", json={"messages": messages_to_send}, 
+                                headers={"x-model-id": model}, stream=True)
+            
+            for line in resp.iter_lines():
+                if line and line.startswith(b'data: '):
+                    data_str = line[6:].decode('utf-8').strip()
+                    if data_str == '[DONE]':
+                        break
+                    try:
+                        data = json.loads(data_str)
+                        if 'status' in data and data['status'] == 'thinking':
+                            # Show thinking indicator
+                            thinking = True
+                            response_placeholder.markdown(f"""<div class='chat-message bot-message'>
+                                <div class='message-content'><em><span class='thinking-dots'>🔍 Searching</span></em></div>
+                            </div>""", unsafe_allow_html=True)
+                        elif 'content' in data:
+                            if thinking:
+                                thinking = False
+                                full_response = ""
+                            full_response += data['content']
+                            response_placeholder.markdown(f"""<div class='chat-message bot-message'>
+                                <div class='message-content'>{clean_leading_headers(full_response)}</div>
+                            </div>""", unsafe_allow_html=True)
+                        elif 'error' in data:
+                            st.error(f"Error: {data['error']}")
+                            break
+                    except json.JSONDecodeError:
+                        pass
+            
+            st.session_state["chat_history"].append({"type": "ai", "content": full_response})
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error: {e}")
+    else:
+        # Non-streaming mode (fine-tuned models)
+        try:
+            # Show thinking indicator
+            response_placeholder.markdown(f"""<div class='chat-message bot-message'>
+                <div class='message-content'><em><span class='thinking-dots'>💭 Thinking</span></em></div>
+            </div>""", unsafe_allow_html=True)
+            
             resp = requests.post(
                 f"{BACKEND_URL}/",
                 json={"messages": messages_to_send},
                 headers={"x-model-id": model},
+                timeout=180
             )
             if resp.ok:
-                # Parse backend response (backend always returns a single message dict)
                 data = resp.json() if resp.headers.get('content-type','').startswith('application/json') else {"type": "ai", "content": resp.text}
                 if not isinstance(data, dict):
                     st.error("Unexpected response shape from backend (expected object)")
@@ -376,3 +480,4 @@ if send_btn and user_message.strip():
                 st.error(f"Failed: {resp.text}")
         except Exception as e:
             st.error(f"Error: {e}")
+
