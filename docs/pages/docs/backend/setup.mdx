@@ -30,16 +30,46 @@ pip install -r requirements.txt
 
 ## 4. Set environment variables
 
+**Recommended:** Create a `.env` file in the `backend` folder:
+
+```dotenv
+IONOS_API_KEY=your_ionos_api_key_here
+TAVILY_API_KEY=your_tavily_api_key_here
+
+# Optional: IONOS Studio fine-tuned models
+STUDIO_API_KEY=your_studio_api_key_here
+STUDIO_ORG_ID=your_studio_org_id_here
+STUDIO_BASE=https://studio.ionos.de/api/v1
+
+# Fine-tuned model UUIDs
+STUDIO_MODEL_QWEN_GDPR=model_uuid_here
+STUDIO_MODEL_GRANITE_GDPR=model_uuid_here
+STUDIO_QWEN3_SHAREGPT=model_uuid_here
+```
+
+**Alternative (shell environment variables):**
+
+Windows PowerShell:
 ```powershell
 $env:IONOS_API_KEY = "<your_ionos_api_key>"
 $env:TAVILY_API_KEY = "<your_tavily_api_key>"
 ```
 
-**Both API keys are required:**
-- **IONOS_API_KEY**: For accessing IONOS AI Models Hub
+macOS/Linux:
+```bash
+export IONOS_API_KEY="<your_ionos_api_key>"
+export TAVILY_API_KEY="<your_tavily_api_key>"
+```
+
+**Required:**
+- **IONOS_API_KEY**: For accessing IONOS AI Models Hub (inference models)
 - **TAVILY_API_KEY**: For web search functionality (essential for the ReAct agent)
 
-Tip: You can also put these in a `.env` file.
+**Optional (for IONOS Studio fine-tuned models):**
+- **STUDIO_API_KEY**: API key for IONOS AI Model Studio
+- **STUDIO_ORG_ID**: Your IONOS Studio organization ID (get from https://studio.ionos.de/platform/org/YOUR_ORG_ID/settings)
+- **STUDIO_BASE**: Base URL for Studio API (defaults to `https://studio.ionos.de/api/v1`)
+- **STUDIO_MODEL_***: UUIDs of your fine-tuned models
 
 ## 5. Run the server
 

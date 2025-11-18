@@ -4,14 +4,25 @@
 
 ## Project Overview
 
-This repository contains a **full-stack RAG chatbot** powered by LangChain and IONOS, with separate **frontend** and **backend** folders:
+This repository contains a **full-stack AI chatbot powered by IONOS AI**, featuring a ReAct agent with real-time web search capabilities. The project includes:
 
-- **frontend**: A Next.js (React) application that allows users to input a page URL, select a model, and chat with an AI assistant based on website content.
-- **backend**: A FastAPI service that:
+- **Backend**: FastAPI service with LangGraph ReAct agent that uses Tavily for web search and integrates with both IONOS AI Model Hub (inference models) and IONOS AI Model Studio (fine-tuned models).
+- **Frontend**: Two options:
+  - **Streamlit** (recommended): Modern, interactive chat interface with real-time streaming support
+  - **Next.js** (alternative): React-based web application
 
-  1. Scrapes and indexes webpage text using TF-IDF for RAG.
-  2. Routes chat requests to IONOS AI models, managing conversation history.
-  3. Exposes endpoints for initializing RAG index, fetching chat history, and sending user messages.
+---
+
+## Key Features
+
+- 🤖 **Intelligent ReAct Agent**: LangGraph-powered agent with tool-calling capabilities
+- 🔍 **Real-time Web Search**: Integrated Tavily API for up-to-date information retrieval
+- 🎯 **Dual Model Support**:
+  - IONOS Model Hub (inference models with web search)
+  - IONOS Studio (fine-tuned models for specialized tasks)
+- ⚡ **Streaming Responses**: Real-time token-by-token output for Hub models
+- 💬 **Conversation History**: Context-aware multi-turn conversations
+- 🚀 **Production Ready**: Kubernetes deployment with CI/CD pipeline
 
 ---
 
@@ -21,9 +32,13 @@ This repository contains a **full-stack RAG chatbot** powered by LangChain and I
 - [Environment Variables](#environment-variables)
 - [Backend Setup](#backend-setup)
 - [Frontend Setup](#frontend-setup)
+  - [Streamlit (Recommended)](#streamlit-recommended)
+  - [Next.js (Alternative)](#nextjs-alternative)
 - [Usage](#usage)
 - [Project Structure](#project-structure)
+- [Adding Fine-tuned Models](#adding-fine-tuned-models)
 - [CI/CD Deployment](#cicd-tag-based-build--kubernetes-deployment)
+- [Documentation](#documentation)
 - [License](#license)
 
 ---
@@ -32,35 +47,49 @@ This repository contains a **full-stack RAG chatbot** powered by LangChain and I
 
 Before you begin, ensure you have:
 
-- **Node.js** (v18 or above) and **npm** or **yarn**
 - **Python** (v3.10 or above)
-- **pip** or **poetry** for Python dependencies
-- An **IONOS API Key** for language model access
+- **pip** for Python dependencies
+- **Node.js** (v18 or above) and **npm** (only if using Next.js frontend)
+- An **IONOS API Key** for AI Model Hub access
+- A **Tavily API Key** for web search functionality
+- **(Optional)** IONOS Studio API key for fine-tuned models
 
 ---
 
 ## Environment Variables
 
-Create a `.env` file in both the **frontend** and **backend** folders using the following template:
-(you can instead create a single unique .env file at project root if you prefer)
+### Backend `.env`
+
+Create a `.env` file in the `backend` folder:
 
 ```dotenv
-# Frontend (Next.js)
-NEXT_PUBLIC_APP_BASE_URL=http://localhost:8000  # URL of the backend API
+# Required
+IONOS_API_KEY=your_ionos_api_key_here
+TAVILY_API_KEY=your_tavily_api_key_here
 
-# Shared / Backend (.env)
-IONOS_API_KEY=your_ionos_api_key_here           # IONOS AI Model Hub key
-RAG_K=3                                         # top-k RAG chunks to retrieve (default: 3)
-CHUNK_SIZE=500                                  # chars per chunk (default: 500)
-MAX_CHUNK_COUNT=256                             # maximum number of chunks (default: 256)
+# Optional: IONOS Studio fine-tuned models
+STUDIO_API_KEY=your_studio_api_key_here
+STUDIO_ORG_ID=your_studio_org_id_here
+STUDIO_BASE=https://studio.ionos.de/api/v1
+
+# Fine-tuned model UUIDs (add as many as needed)
+STUDIO_MODEL_QWEN_GDPR=model_uuid_here
+STUDIO_MODEL_GRANITE_GDPR=model_uuid_here
+STUDIO_QWEN3_SHAREGPT=model_uuid_here
 ```
 
-- **NEXT_PUBLIC_APP_BASE_URL**: URL where your backend is running, used by the frontend.
+### Frontend `.env`
 
-- **IONOS_API_KEY**: Your secret key for accessing IONOS AI Model Hub (required by the backend).
-- **RAG_K**: Number of top chunks to retrieve for context.
-- **CHUNK_SIZE**: Maximum characters per chunk when splitting scraped text.
-- **MAX_CHUNK_COUNT**: Cap on total chunks to index.
+**Streamlit** (`frontends/streamlit-starter/.env`):
+```dotenv
+BACKEND_URL=http://localhost:8000
+IONOS_API_KEY=your_ionos_api_key_here
+```
+
+**Next.js** (`frontends/next-js-starter/.env`):
+```dotenv
+NEXT_PUBLIC_APP_BASE_URL=http://localhost:8000
+```
 
 ---
 
@@ -72,16 +101,32 @@ MAX_CHUNK_COUNT=256                             # maximum number of chunks (defa
    cd backend
    ```
 
-2. **Install** dependencies:
+2. **Create and activate** a virtual environment:
+
+   **macOS/Linux:**
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+
+   **Windows:**
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+3. **Install** dependencies:
 
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Run** the FastAPI server locally:
+4. **Create** `.env` file with required variables (see [Environment Variables](#environment-variables))
+
+5. **Run** the FastAPI server:
 
    ```bash
-   python main.py
+   uvicorn main:app --host 127.0.0.1 --port 8000 --reload
    ```
 
    The backend will be available at `http://localhost:8000`.
@@ -90,126 +135,250 @@ MAX_CHUNK_COUNT=256                             # maximum number of chunks (defa
 
 ## Frontend Setup
 
-1. **Navigate** to the `frontend` folder:
+### Streamlit (Recommended)
+
+1. **Navigate** to the Streamlit folder:
 
    ```bash
-   cd frontend
+   cd frontends/streamlit-starter
+   ```
+
+2. **Create and activate** a virtual environment:
+
+   **macOS/Linux:**
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+
+   **Windows:**
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+3. **Install** dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Create** `.env` file with `BACKEND_URL=http://localhost:8000` and `IONOS_API_KEY`
+
+5. **Run** the Streamlit app:
+
+   ```bash
+   streamlit run app.py
+   ```
+
+   The app will open automatically at `http://localhost:8501`.
+
+### Next.js (Alternative)
+
+1. **Navigate** to the Next.js folder:
+
+   ```bash
+   cd frontends/next-js-starter
    ```
 
 2. **Install** dependencies:
 
    ```bash
    npm install
-   # or
-   yarn install
    ```
 
-3. **Start** the development server:
+3. **Create** `.env` file with `NEXT_PUBLIC_APP_BASE_URL=http://localhost:8000`
+
+4. **Start** the development server:
 
    ```bash
    npm run dev
-   # or
-   yarn dev
    ```
 
-   The frontend will be available at `http://localhost:3000`.
+   The app will be available at `http://localhost:3000`.
 
 ---
 
 ## Usage
 
-1. **Open** your browser at `http://localhost:3000`.
-2. **Enter** a page URL to scrape and wait for RAG initialization.
-3. **Select** an AI model from the dropdown.
-4. **Start** chatting—messages will be sent to the backend, enriched with top-k context, and answered by your chosen model.
+1. **Start the backend** (see [Backend Setup](#backend-setup))
+2. **Start your preferred frontend** (see [Frontend Setup](#frontend-setup))
+3. **Select a model type**:
+   - **Inference**: IONOS Hub models with web search capabilities
+   - **Fine-tuned**: Your custom Studio models for specialized tasks
+4. **Choose a model** from the dropdown
+5. **Start chatting**—the agent will search the web when needed and provide informed responses
 
 ---
 
 ## Project Structure
 
 ```
-├── frontend             # Next.js React app
-│   ├── .env             # Frontend environment config
-│   ├── app/
-│   ├── components/
-│   ├── public/
-│   ├── lib/
-│   └── package.json
-└── backend              # FastAPI service
-    ├── .env             # Backend environment config
-    ├── main.py          # FastAPI entrypoint
-    ├── requirements.txt
-    └── other modules…
+IONOS-simple-chatbot/
+├── .env                        # Root environment variables (optional)
+├── .env.template              # Environment template
+├── README.md
+├── LICENSE
+├── CODE_OF_CONDUCT.md
+├── docker-compose.yml         # Docker Compose configuration
+├── kubernetes_config.tpl      # K8s deployment template
+├── pyproject.toml            # Root Python project metadata
+├── uv.lock                   # UV lockfile
+│
+├── backend/                   # FastAPI service
+│   ├── main.py               # API endpoints and routing
+│   ├── chatbot_agent.py      # LangGraph ReAct agent setup
+│   ├── studio_client.py      # IONOS Studio API client
+│   ├── requirements.txt      # Python dependencies
+│   ├── Dockerfile            # Container image definition
+│   ├── Makefile              # Build automation
+│   └── .env                  # Backend environment config
+│
+├── frontends/
+│   ├── streamlit-starter/    # Streamlit UI (recommended)
+│   │   ├── app.py           # Main application
+│   │   ├── requirements.txt # Python dependencies
+│   │   └── Dockerfile       # Container image
+│   │
+│   └── next-js-starter/      # Next.js UI (alternative)
+│       ├── app/             # Next.js app directory
+│       │   ├── layout.tsx
+│       │   ├── page.tsx
+│       │   └── globals.css
+│       ├── components/      # React components
+│       │   ├── ChatLog.tsx
+│       │   ├── Message.tsx
+│       │   ├── TextInput.tsx
+│       │   └── ui/         # Shadcn UI components
+│       ├── lib/            # Utilities
+│       ├── public/         # Static assets
+│       ├── package.json
+│       └── tsconfig.json
+│
+├── docs/                     # Documentation site (Nextra)
+│   ├── pages/
+│   │   ├── docs/
+│   │   │   ├── getting-started/
+│   │   │   ├── backend/
+│   │   │   ├── frontend/
+│   │   │   └── deployment/
+│   │   └── index.tsx
+│   ├── public/assets/       # Documentation assets
+│   ├── styles/
+│   ├── package.json
+│   └── next.config.mjs
+│
+└── assets/
+    └── images/              # Repository images
+        ├── cover.jpg
+        └── screenshot.png
 ```
+
+---
+
+## Adding Fine-tuned Models
+
+To add a new IONOS Studio fine-tuned model:
+
+1. **Add the model UUID** to `backend/.env`:
+   ```dotenv
+   STUDIO_MODEL_YOUR_NAME=your-model-uuid-here
+   ```
+
+2. **Register the model** in `backend/main.py`:
+   ```python
+   @app.get("/studio/models")
+   async def get_studio_models():
+       models = {
+           "qwen-gdpr": os.getenv("STUDIO_MODEL_QWEN_GDPR"),
+           "your-model-name": os.getenv("STUDIO_MODEL_YOUR_NAME"),  # Add this
+       }
+       return {k: v for k, v in models.items() if v}
+   ```
+
+3. **Restart the backend**—the model will appear in the frontend dropdown automatically
 
 ---
 
 ## CI/CD: Tag-Based Build & Kubernetes Deployment
 
-This repository includes an automated deployment workflow located at `.github/workflows/deploy.yml`. It builds versioned container images for the backend and Streamlit frontend, then deploys them to an IONOS-managed Kubernetes cluster when a version tag is pushed.
+This repository includes automated CI/CD via GitHub Actions (`.github/workflows/deploy.yml`).
 
 ### Trigger
 
-- Event: `push`
-- Condition: Git tag name matches the regex `[0-9]+.[0-9]+.[0-9]+` (examples: `1.0.0`, `2.3.7`). Only tags in this strict numeric format start the workflow.
+Push a version tag matching `X.Y.Z` format (e.g., `1.0.0`, `2.3.7`):
 
-### High-Level Steps
-
-1. Checkout source code.
-2. Log in to the container registry using `DOCKER_USERNAME` / `DOCKER_PASSWORD` and the repository variable `IMAGE_REGISTRY`.
-3. Build & push two images (version + `latest` tag each):
-   - Backend (`./backend`, `./backend/Dockerfile`)
-   - Frontend Streamlit app (`./frontends/streamlit-starter`, `./frontends/streamlit-starter/Dockerfile`)
-4. Install `kubectl` via `azure/setup-kubectl`.
-5. Configure kube context using the `KUBE_CONFIG` secret.
-6. Recreate Kubernetes secret `secrets` with keys `IONOS_API_KEY` and `TAVILY_API_KEY`.
-7. Template `kubernetes_config.tpl` into `kubernetes_config.yaml` using `envsubst` (environment variable substitution).
-8. Validate manifest with a client-side dry run.
-9. Apply manifest to the cluster.
-10. Wait for rollout completion of deployments `backend` and `streamlit`.
-
-### Image Tagging Convention
-
-For each successful tagged build:
-
-| Component | Immutable Tag | Convenience Tag |
-|-----------|---------------|-----------------|
-| Backend   | `<IMAGE_REGISTRY>/backend:<tag>`   | `<IMAGE_REGISTRY>/backend:latest`   |
-| Frontend  | `<IMAGE_REGISTRY>/frontend:<tag>`  | `<IMAGE_REGISTRY>/frontend:latest`  |
-
-Use the immutable (version) tag in production manifests; `latest` is only a moving pointer.
-
-### Variables & Secrets Consumed
-
-| Type | Name | Purpose |
-|------|------|---------|
-| Repository Variable | `IMAGE_REGISTRY` | Base registry path used for tagging & login |
-| Git Tag (runtime) | `github.ref_name` → `VERSION` | Version string injected into image names |
-| Secret | `DOCKER_USERNAME` / `DOCKER_PASSWORD` | Registry authentication |
-| Secret | `KUBE_CONFIG` | kubeconfig content for cluster access |
-| Secret | `IONOS_API_KEY` | Access to IONOS AI Model Hub |
-| Secret | `TAVILY_API_KEY` | Use the Tavily web search tool in the agent |
-
-### Kubernetes Secret Handling
-
-The workflow deletes (if present) and recreates a generic secret named `secrets` containing `IONOS_API_KEY` and `TAVILY_API_KEY` each run, ensuring updated credential values are applied.
-
-### Deployment Validation
-
-After applying manifests, the workflow blocks until both deployments report a successful rollout:
-
-```
-kubectl rollout status deployment/backend
-kubectl rollout status deployment/streamlit
+```bash
+git tag 1.0.0
+git push origin 1.0.0
 ```
 
-### Summary
+### Workflow Steps
 
-Tagging a commit with a properly formatted version (`X.Y.Z`) triggers an automated build of backend and frontend images, publication to the configured registry (both immutable and `latest` tags), templating of the Kubernetes manifest, and a controlled rollout with status verification. No additional testing, linting, or release note generation steps are part of this workflow at present.
+1. **Build & Push** Docker images for backend and Streamlit frontend
+2. **Tag** images with both version number and `latest`
+3. **Deploy** to IONOS Kubernetes cluster
+4. **Update** secrets with `IONOS_API_KEY` and `TAVILY_API_KEY`
+5. **Validate** deployment with rollout status checks
+
+### Required Secrets
+
+Configure these in your GitHub repository settings:
+
+- `DOCKER_USERNAME` / `DOCKER_PASSWORD`: Container registry credentials
+- `KUBE_CONFIG`: Kubernetes cluster configuration
+- `IONOS_API_KEY`: IONOS AI Model Hub API key
+- `TAVILY_API_KEY`: Tavily web search API key
+- `STUDIO_API_KEY`: (Optional) IONOS Studio API key
+- `STUDIO_ORG_ID`: (Optional) Studio organization ID
+
+### Image Naming
+
+| Component | Version Tag | Latest Tag |
+|-----------|-------------|------------|
+| Backend   | `<registry>/backend:1.0.0` | `<registry>/backend:latest` |
+| Frontend  | `<registry>/frontend:1.0.0` | `<registry>/frontend:latest` |
 
 ---
+
+## Documentation
+
+Comprehensive documentation is available at the `/docs` directory, powered by Nextra. Topics include:
+
+- 📖 **Getting Started**: Prerequisites, environment setup, installation
+- 🔧 **Backend**: API reference, agent tools, troubleshooting
+- 🎨 **Frontend**: Streamlit and Next.js setup guides
+- 🚀 **Deployment**: Docker, Kubernetes, CI/CD pipelines
+- 🏗️ **Architecture**: Project structure, model routing, agent design
+
+To run the docs locally:
+
+```bash
+cd docs
+npm install
+npm run dev
+```
+
+Visit `http://localhost:3000` to browse the documentation.
+
+---
+
 ## License
 
 This project is released under the [MIT License](LICENSE). Feel free to use and modify it in your own applications.
 
 ---
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+---
+
+## Support
+
+For issues, questions, or feature requests, please open an issue on GitHub.
+
+---
+
+**Built with ❤️ using IONOS AI, LangGraph, FastAPI, and Streamlit**

@@ -2,10 +2,19 @@
 
 ## Streamlit Frontend
 1. Go to `http://localhost:8501`
-2. The app will automatically fetch available IONOS AI models
-3. Select a model from the dropdown in the sidebar
-4. Start chatting with the intelligent agent
-5. The agent will automatically search the web and reason about your requests
+2. **Choose Model Type**:
+   - **Inference**: IONOS Model Hub models with web search capabilities
+   - **Fine-tuned**: Your custom IONOS Studio models
+3. **Select a model** from the dropdown (models are fetched automatically)
+4. **Start chatting** with the AI
+5. For inference models, the agent will automatically search the web when needed
+6. For fine-tuned models, you get specialized responses without web search
+
+**Features:**
+- Real-time streaming for inference models
+- Conversation history
+- Modern, responsive UI
+- Instant message display
 
 ## Next.js Frontend  
 1. Go to `http://localhost:3000`
@@ -13,4 +22,8 @@
 3. Start chatting with the ReAct agent
 4. Experience real-time web search and context-aware responses
 
-Both frontends handle conversation history locally and send the full message array to the backend for each request. The backend ReAct agent processes the conversation context and returns intelligent responses with dynamic web search capabilities.
+**Note:** The Next.js frontend is an alternative option and may not have all the features of the Streamlit app.
+
+---
+
+Both frontends handle conversation history locally and send the full message array to the backend for each request. The backend intelligently routes requests to either the ReAct agent (for inference models with web search) or directly to IONOS Studio (for fine-tuned models).

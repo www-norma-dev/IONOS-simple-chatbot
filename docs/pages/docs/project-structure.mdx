@@ -8,8 +8,9 @@ IONOS-simple-chatbot/
 ├─ .gitignore                       # Git ignore rules
 ├─ backend/                         # FastAPI service + agent
 │  ├─ .env                          # Backend-specific environment variables
-│  ├─ main.py                       # API entrypoint (GET/POST /)
+│  ├─ main.py                       # API entrypoint (GET/POST /, /studio/models)
 │  ├─ chatbot_agent.py              # LangGraph ReAct agent + tools
+│  ├─ studio_client.py              # IONOS Studio API client
 │  ├─ requirements.txt              # Python dependencies
 │  ├─ Dockerfile                    # Docker container config
 │  └─ Makefile                      # Build automation
