@@ -77,6 +77,7 @@ async def get_studio_models():
         "granite-gdpr": os.getenv("STUDIO_MODEL_GRANITE_GDPR"),
         "qwen3-sharegpt": os.getenv("STUDIO_QWEN3_SHAREGPT"),
         "Qwen3-customersupport": os.getenv("STUDIO_QWEN3_customersupport"),
+        "AlpacaBot": os.getenv("STUDIO_ALPACA_BOT"),
     }
     # Filter out None values
     return {k: v for k, v in models.items() if v}
