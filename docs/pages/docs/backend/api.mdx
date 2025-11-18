@@ -89,16 +89,16 @@ Returns a dictionary mapping model names to their UUIDs.
 ```
 
 **Usage:**
-Frontend applications use this endpoint to populate the fine-tuned model dropdown. When a fine-tuned model is selected, the frontend sends the model UUID prefixed with `studio:` in the `x-model-id` header (e.g., `studio:7b19cae7-0983-4a6b-a03c-a647db48f00b`), and the backend routes to IONOS Studio API.
+Frontend applications use this endpoint to populate the fine-tuned model dropdown. When a fine-tuned model is selected, the frontend sends the raw model UUID in the `x-model-id` header (e.g., `7b19cae7-0983-4a6b-a03c-a647db48f00b`), and the backend automatically detects and routes to IONOS Studio API.
 
 ## Model Routing
 
-The backend supports two types of models and routes based on the `x-model-id` header format:
+The backend supports two types of models and automatically routes based on the `x-model-id` format:
 
-1. **IONOS Hub (Inference Models)**: Provider/name format (e.g., `mistralai/Mistral-Small-24B-Instruct`)
-2. **IONOS Studio (Fine-tuned Models)**: Prefixed UUID format (e.g., `studio:7b19cae7-0983-4a6b-a03c-a647db48f00b`)
+1. **IONOS Hub (Inference Models)**: Provider/name format with slash (e.g., `mistralai/Mistral-Small-24B-Instruct`)
+2. **IONOS Studio (Fine-tuned Models)**: UUID format (e.g., `7b19cae7-0983-4a6b-a03c-a647db48f00b`)
 
-The backend detects Studio models by checking if the model ID starts with `studio:` prefix.
+The backend detects Studio models using Python's `uuid` module - if the model ID is a valid UUID, it routes to Studio. No prefix needed.
 
 ## Example Test in Postman
 

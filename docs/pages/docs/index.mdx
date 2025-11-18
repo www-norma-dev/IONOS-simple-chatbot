@@ -32,7 +32,7 @@ A full‑stack intelligent agent powered by LangGraph ReAct architecture and ION
 ## How it works
 **Inference Models (Hub):** Client sends messages → FastAPI routes to ReAct agent → agent uses tools like web search → model produces context-aware answer with streaming support.
 
-**Fine-tuned Models (Studio):** Client sends messages with `studio:` prefix → FastAPI routes to Studio API → specialized model produces answer without web search.
+**Fine-tuned Models (Studio):** Client sends messages with model UUID → FastAPI detects UUID format and routes to Studio API → specialized model produces answer without web search.
 
 Learn more:
 - [Backend API](/docs/backend/api)

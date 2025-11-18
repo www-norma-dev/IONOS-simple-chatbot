@@ -80,4 +80,4 @@ async def get_studio_models():
 
 3. **Restart backend** - The new model will appear in the frontend dropdown automatically
 
-**Note:** The frontend automatically prefixes Studio model UUIDs with `studio:` when sending to the backend (e.g., `studio:7b19cae7-0983-4a6b-a03c`). This allows the backend to route requests to the correct API (IONOS Hub vs. Studio).
+**Note:** The frontend sends raw Studio model UUIDs to the backend (e.g., `7b19cae7-0983-4a6b-a03c`). The backend automatically detects UUID format and routes to IONOS Studio API, while provider/name formats (e.g., `mistralai/Mistral-Small`) route to IONOS Hub.
