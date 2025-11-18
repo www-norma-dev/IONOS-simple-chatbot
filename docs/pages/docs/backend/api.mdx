@@ -72,6 +72,34 @@ Returns the last message from the agent conversation as a LangChain message obje
 
 **Note:** Frontend applications should extract the `content` field for the actual message text. The response includes comprehensive LangChain metadata including token usage, model information, and execution details.
 
+## GET /studio/models
+
+Retrieve available fine-tuned models from IONOS Studio.
+
+**Response:**
+Returns a dictionary mapping model names to their UUIDs.
+
+**Example Response:**
+```json
+{
+  "qwen-gdpr": "uuid-1234-5678-90ab-cdef",
+  "granite-gdpr": "uuid-abcd-efgh-ijkl-mnop",
+  "qwen3-sharegpt": "uuid-9876-5432-10fe-dcba"
+}
+```
+
+**Usage:**
+Frontend applications use this endpoint to populate the fine-tuned model dropdown. When a fine-tuned model is selected, the frontend sends the model UUID prefixed with `studio:` in the `x-model-id` header (e.g., `studio:7b19cae7-0983-4a6b-a03c-a647db48f00b`), and the backend routes to IONOS Studio API.
+
+## Model Routing
+
+The backend supports two types of models and routes based on the `x-model-id` header format:
+
+1. **IONOS Hub (Inference Models)**: Provider/name format (e.g., `mistralai/Mistral-Small-24B-Instruct`)
+2. **IONOS Studio (Fine-tuned Models)**: Prefixed UUID format (e.g., `studio:7b19cae7-0983-4a6b-a03c-a647db48f00b`)
+
+The backend detects Studio models by checking if the model ID starts with `studio:` prefix.
+
 ## Example Test in Postman
 
 ![Postman API Test Example](/assets/testpayload.png)

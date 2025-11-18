@@ -35,17 +35,49 @@ pip install -r requirements.txt  # or: pip install streamlit requests
 streamlit run app.py
 ```
 
-Ensure the backend is running on `http://localhost:8000`.
+**Note:** The frontend expects the backend on `http://backend-service:8000` by default (Kubernetes). For local development, create a `.env` file with `BACKEND_URL=http://localhost:8000`.
 
 ## Configure
 
-- Backend URL is hardcoded as `BACKEND_URL = "http://localhost:8000"`
-- Model selection fetches available models from IONOS API dynamically
+- Backend URL defaults to `http://backend-service:8000` for Kubernetes deployment
+- For local development: Create `.env` file with `BACKEND_URL=http://localhost:8000`
+- IONOS_API_KEY is required in frontend `.env` for fetching inference models
+- Model selection supports both IONOS Hub inference models and Studio fine-tuned models
 - The agent automatically handles web search and reasoning without additional configuration
 
 ## Features
 
 - **Real-time Chat**: Instant responses from IONOS AI models
-- **Dynamic Web Search**: Automatically searches the web when needed
+- **Dynamic Web Search**: Automatically searches the web when needed (inference models only)
 - **Context Awareness**: Remembers conversation history
-- **Model Selection**: Choose from available IONOS AI models
+- **Model Type Selection**: Switch between Inference and Fine-tuned models
+  - **Inference Models**: IONOS Hub models with web search capabilities (fetched directly from IONOS API)
+  - **Fine-tuned Models**: Studio models for specialized tasks (fetched from backend `/studio/models` endpoint)
+- **Model Selection**: Choose from available models based on selected type
+
+## Adding New Fine-tuned Models
+
+To add a new fine-tuned model:
+
+1. **Add model UUID to backend `.env`**:
+```dotenv
+STUDIO_YOUR_MODEL_NAME=your-model-uuid-here
+```
+
+2. **Update backend `main.py`** in the `/studio/models` endpoint:
+```python
+@app.get("/studio/models")
+async def get_studio_models():
+    import os
+    models = {
+        "qwen-gdpr": os.getenv("STUDIO_MODEL_QWEN_GDPR"),
+        "granite-gdpr": os.getenv("STUDIO_MODEL_GRANITE_GDPR"),
+        "qwen3-sharegpt": os.getenv("STUDIO_QWEN3_SHAREGPT"),
+        "your-model-name": os.getenv("STUDIO_YOUR_MODEL_NAME"),  # Add this line
+    }
+    return {k: v for k, v in models.items() if v}
+```
+
+3. **Restart backend** - The new model will appear in the frontend dropdown automatically
+
+**Note:** The frontend automatically prefixes Studio model UUIDs with `studio:` when sending to the backend (e.g., `studio:7b19cae7-0983-4a6b-a03c`). This allows the backend to route requests to the correct API (IONOS Hub vs. Studio).
