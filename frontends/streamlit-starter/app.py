@@ -265,10 +265,10 @@ st.sidebar.markdown("""
 # Model Selection Section
 st.sidebar.subheader("🤖 Model Selection")
 
-# Model type selector
+# Model source selector
 model_type = st.sidebar.radio(
-    "Model Type",
-    options=["Inference", "Fine-tuned"],
+    "Model Source",
+    options=["IONOS Model Hub", "IONOS Studio"],
     index=0,
     key="model_type"
 )
@@ -300,7 +300,7 @@ def fetch_finetuned_models():
         st.sidebar.error(f"Error fetching fine-tuned models: {e}")
         return {}
 
-if model_type == "Inference":
+if model_type == "IONOS Model Hub":
     inference_models = fetch_inference_models()
     # Preselect gpt-oss-120b if available
     default_index = 0
@@ -316,7 +316,7 @@ if model_type == "Inference":
         index=default_index
     )
     model = selected_model
-else:  # Fine-tuned
+else:  # IONOS Studio
     finetuned_models = fetch_finetuned_models()
     finetuned_names = list(finetuned_models.keys())
     if not finetuned_names:
@@ -333,8 +333,8 @@ else:  # Fine-tuned
 
 st.sidebar.markdown("---")
 
-# Streaming toggle (only for inference models)
-enable_streaming = model_type == "Inference" and st.sidebar.checkbox("⚡ Enable Streaming", value=True, help="Stream responses token-by-token (web search still works)")
+# Streaming toggle (only for Hub models)
+enable_streaming = model_type == "IONOS Model Hub" and st.sidebar.checkbox("⚡ Enable Streaming", value=True, help="Streaming responses token-by-token")
 
 st.sidebar.markdown("---")
 
