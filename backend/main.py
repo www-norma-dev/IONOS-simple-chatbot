@@ -1,5 +1,6 @@
 import logging
 
+
  
 from langchain_core.messages import (
     HumanMessage,
@@ -8,6 +9,7 @@ from langchain_core.messages import (
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from langchain_core.runnables import RunnableConfig
  
 from langgraph.graph.state import CompiledStateGraph
@@ -18,6 +20,9 @@ from mangum import Mangum
 from typing import Optional
 
 from chatbot_agent import create_chatbot_agent
+from studio_client import studio_call, is_studio_model
+import json
+import os
 
 # ─── Logging setup ───────────────────────────────────────────────────────
 logging.basicConfig(
@@ -28,9 +33,9 @@ logger = logging.getLogger("chatbot-server")
 
 
 # ─── REQUEST MODELS ───────────────────────────────────────────────────
+
 class NewChatRequest(BaseModel):
     page_url: str
-
 
 class UserMessage(BaseModel):
     prompt: str
@@ -54,32 +59,83 @@ app.add_middleware(
     max_age=3600,
 )
 
-
  
-
-
-
-
-
 # ─── Chat endpoints ─────────────────────────────────────────────────────
+
 @app.get("/")
 async def get_chat_logs():
-    logger.info("Received GET /; returning chat_log")
     # No chat log stored on backend anymore
     return []
+
+
+@app.get("/studio/models")
+async def get_studio_models():
+    """Return available fine-tuned Studio models from env."""
+    import os
+    models = {
+        "qwen-gdpr": os.getenv("STUDIO_MODEL_QWEN_GDPR"),
+        "granite-gdpr": os.getenv("STUDIO_MODEL_GRANITE_GDPR"),
+        "qwen3-sharegpt": os.getenv("STUDIO_QWEN3_SHAREGPT"),
+        "Qwen3-customersupport": os.getenv("STUDIO_QWEN3_customersupport"),
+        "AlpacaBot": os.getenv("STUDIO_ALPACA_BOT"),
+    }
+    # Filter out None values
+    return {k: v for k, v in models.items() if v}
 
 
 @app.post("/")
 async def chat(request: Request):
     data = await request.json()
     messages = data.get("messages", [])
-    logger.info(f"Injecting messages into agent state: {messages}")
+    stream = request.query_params.get("stream") == "true"
+    
     model_id = request.headers.get("x-model-id")
-    logger.info(f"Received x-model-id header: {model_id}")
+    
     if not model_id:
         raise HTTPException(status_code=400, detail="Missing x-model-id header")
-    # Create agent and state from scratch for each request
+    
+    # Keep chat log manageable (last 50 messages)
+    if len(messages) > 50:
+        messages = messages[-50:]
+    
+    # Route to Studio or Hub based on model ID format
+    if is_studio_model(model_id):
+        if stream:
+            raise HTTPException(status_code=400, detail="Studio models do not support streaming")
+        try:
+            text = studio_call(model_id, messages)
+            return {"type": "ai", "content": text}
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=str(e))
+    
+    # Hub inference model
+    is_reasoning_model = "gpt-oss" in model_id.lower() or "o1" in model_id.lower()
+    
+    if is_reasoning_model:
+        # Direct API call for reasoning models (no tools)
+        from openai import OpenAI
+        client = OpenAI(base_url="https://openai.inference.de-txl.ionos.com/v1", api_key=os.getenv("IONOS_API_KEY"))
+        openai_msgs = [{"role": "user" if m["type"] in ("human", "user") else "assistant", "content": m["content"]}
+                       for m in messages if m["type"] in ("human", "user", "ai", "assistant")]
+        
+        if stream:
+            def generate():
+                yield f"data: {json.dumps({'status': 'thinking'})}\n\n"
+                try:
+                    for chunk in client.chat.completions.create(model=model_id, messages=openai_msgs, stream=True, max_tokens=2048):
+                        if chunk.choices[0].delta.content:
+                            yield f"data: {json.dumps({'content': chunk.choices[0].delta.content})}\n\n"
+                    yield "data: [DONE]\n\n"
+                except Exception as e:
+                    yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            return StreamingResponse(generate(), media_type="text/event-stream")
+        
+        response = client.chat.completions.create(model=model_id, messages=openai_msgs, max_tokens=2048)
+        return {"type": "ai", "content": response.choices[0].message.content}
+    
+    # Regular models - use agent for web search
     agent = create_chatbot_agent(model_id)
+    
     def build_state_messages(msgs):
         state_messages = []
         for m in msgs:
@@ -92,13 +148,32 @@ async def chat(request: Request):
             else:
                 state_messages.append(m)
         return state_messages
+    
     state_messages = build_state_messages(messages)
+    
+    if stream:
+        def generate():
+            yield f"data: {json.dumps({'status': 'thinking'})}\n\n"
+            try:
+                result = AgentStatePydantic.model_validate(
+                    agent.invoke(input=AgentStatePydantic(messages=state_messages), config=RunnableConfig())
+                )
+                content = result.messages[-1].content if result.messages else ""
+                
+                # Stream response smoothly
+                import time
+                for i in range(0, len(content), 5):
+                    yield f"data: {json.dumps({'content': content[i:i+5]})}\n\n"
+                    time.sleep(0.01)
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        return StreamingResponse(generate(), media_type="text/event-stream")
+    
+    # Non-streaming
     state = AgentStatePydantic(messages=state_messages)
     result = agent.invoke(input=state, config=RunnableConfig())
     state = AgentStatePydantic.model_validate(result)
-    # Keep chat log manageable (last 20 messages)
-    if len(state.messages) > 20:
-        state.messages = state.messages[-20:]
     return state.messages[-1]
 
 
