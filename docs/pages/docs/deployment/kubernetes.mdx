@@ -57,6 +57,9 @@ You need three independent things ready:
 3) Runtime API keys used by the app (created as a Kubernetes Secret):
 - IONOS_API_KEY 
 - TAVILY_API_KEY 
+- STUDIO_API_KEY (if using IONOS Studio fine-tuned models)
+- STUDIO_ORG_ID (if using IONOS Studio)
+- STUDIO_MODEL_* (individual fine-tuned model UUIDs)
 
 
 ---
@@ -92,16 +95,23 @@ kubectl delete secret secrets -n default --ignore-not-found
 # Set your real keys (no angle brackets)
 kubectl create secret generic secrets -n default \
   --from-literal=IONOS_API_KEY="YOUR_IONOS_API_KEY" \
-  --from-literal=TAVILY_API_KEY="YOUR_TAVILY_API_KEY"
+  --from-literal=TAVILY_API_KEY="YOUR_TAVILY_API_KEY" \
+  --from-literal=STUDIO_API_KEY="YOUR_STUDIO_API_KEY" \
+  --from-literal=STUDIO_ORG_ID="YOUR_STUDIO_ORG_ID" \
+  --from-literal=STUDIO_BASE="https://studio.ionos.de/api/v1" \
+  --from-literal=STUDIO_MODEL_QWEN_GDPR="YOUR_MODEL_UUID" \
+  --from-literal=STUDIO_MODEL_GRANITE_GDPR="YOUR_MODEL_UUID"
+  # Add more STUDIO_MODEL_* as needed
 ```
 
-Now check that the secret exists and includes both keys:
+Now check that the secret exists and includes all keys:
 
 ```bash
 kubectl get secret secrets -n default
-kubectl get secret secrets -n default -o jsonpath='{.data.IONOS_API_KEY}' | base64 --decode && echo
-kubectl get secret secrets -n default -o jsonpath='{.data.TAVILY_API_KEY}' | base64 --decode && echo
+kubectl get secret secrets -n default -o jsonpath='{.data}' | jq
 ```
+
+**When adding new env vars:** Delete secret, recreate with ALL vars, then `kubectl rollout restart` deployments.
 
 Later verification inside running Pods
 After rollout, you can confirm the app sees the env vars:
@@ -171,24 +181,48 @@ kubectl get deploy streamlit -n default -o jsonpath='{.spec.template.spec.imageP
 
 ---
 
-## 5) CI/CD with GitHub Actions (tags trigger build & deploy)
+## 5) Manual Deployment
 
-The workflow runs when you push a semantic tag such as 0.1.5.
+> **⚠️ On Apple Silicon (M1/M2/M3):** Use `--platform linux/amd64` or pods fail with `ImagePullBackOff`
 
-### 5.1 Required Repository Variables (Settings → Variables → Repository variables)
+```bash
+# Build for AMD64
+docker build --platform linux/amd64 -t registry/backend:0.2.0 ./backend
+docker build --platform linux/amd64 -t registry/frontend:0.2.0 ./frontends/streamlit-starter
+
+# Push
+docker push registry/backend:0.2.0 && docker push registry/frontend:0.2.0
+
+# Deploy
+kubectl set image deployment/backend backend=registry/backend:0.2.0 -n default
+kubectl set image deployment/streamlit streamlit=registry/frontend:0.2.0 -n default
+kubectl rollout status deployment/backend -n default
+```
+
+---
+
+## 6) CI/CD with GitHub Actions (tags trigger build & deploy)
+
+The workflow runs when you push a semantic tag such as `0.1.5` (NOT `v0.1.5`).
+
+> **⚠️ Tag Format:** Our CI/CD pipeline triggers on tags matching `0.x.x` pattern. Do NOT use `v` prefix (e.g., `v0.2.0` will NOT trigger the pipeline).
+
+### 6.1 Required Repository Variables (Settings → Variables → Repository variables)
 - `IMAGE_REGISTRY` = `chatbot-registry.cr.de-fra.ionos.com/starter-pack`
 
 <a id="ci-secrets"></a>
-### 5.2 Required Secrets (Settings → Secrets → Actions)
+### 6.2 Required Secrets (Settings → Secrets → Actions)
 - `DOCKER_USERNAME` = your registry username, for example `chatbot`
 - `DOCKER_PASSWORD` = `&lt;YOUR_IONOS_REGISTRY_ACCESS_TOKEN&gt;`
 - `KUBE_CONFIG` = paste the full contents of the kubeconfig.yaml you downloaded in step 2 (do not commit this file to the repo)
 - `IONOS_API_KEY` = `&lt;runtime API key&gt;`
 - `TAVILY_API_KEY` = `&lt;runtime API key&gt;`
+- `STUDIO_API_KEY` = `&lt;Studio API key&gt;` (if using Studio)
+- `STUDIO_ORG_ID` = `&lt;Studio organization ID&gt;` (if using Studio)
 
 
 
-### 5.3 Trigger a deployment
+### 6.3 Trigger a deployment
 
 From your local repo at the commit you want to deploy:
 
@@ -196,11 +230,15 @@ From your local repo at the commit you want to deploy:
 git checkout main
 git pull origin main
 
-git tag 0.1.5
-git push origin 0.1.5
+# ✅ Correct - triggers CI/CD
+git tag 0.2.0
+git push origin 0.2.0
+
+# ❌ Wrong - won't trigger CI/CD
+# git tag v0.2.0
 ```
 
-Monitor GitHub → Actions → latest run for tag `0.1.5`.
+Monitor GitHub → Actions → latest run for tag `0.2.0`.
 
 Confirm the cluster is running the new tag:
 
@@ -208,13 +246,13 @@ Confirm the cluster is running the new tag:
 kubectl get deploy backend   -n default -o jsonpath='{.spec.template.spec.containers[0].image}'; echo
 kubectl get deploy streamlit -n default -o jsonpath='{.spec.template.spec.containers[0].image}'; echo
 # expect:
-# chatbot-registry.cr.de-fra.ionos.com/starter-pack/backend:0.1.5
-# chatbot-registry.cr.de-fra.ionos.com/starter-pack/frontend:0.1.5
+# chatbot-registry.cr.de-fra.ionos.com/starter-pack/backend:0.2.0
+# chatbot-registry.cr.de-fra.ionos.com/starter-pack/frontend:0.2.0
 ```
 
 ---
 
-## 6) Services & endpoints
+## 7) Services & endpoints
 
 List service external IPs:
 
@@ -232,11 +270,29 @@ Open:
 
 ---
 
-## 7) What must be true at the end
+## 8) Verification Checklist
 
-- `kubectl get deploy -A` shows backend and streamlit AVAILABLE=1
-- `kubectl get svc -n default` shows EXTERNAL-IP for both services
-- `kubectl get deploy ... -o jsonpath='{.spec.template.spec.containers[0].image}'` shows your new tag, for example `:0.1.5`
-- `kubectl exec ... -- env` in both pods shows IONOS_API_KEY (and other required env vars)
+Confirm deployment is successful:
+
+- ✅ `kubectl get deploy -A` shows backend and streamlit AVAILABLE=1
+- ✅ `kubectl get svc -n default` shows EXTERNAL-IP for both services
+- ✅ `kubectl get deploy ... -o jsonpath='{.spec.template.spec.containers[0].image}'` shows your new tag (e.g., `:0.2.0`)
+- ✅ `kubectl exec ... -- env` in both pods shows IONOS_API_KEY, TAVILY_API_KEY, and STUDIO_* variables (if applicable)
+- ✅ Frontend is accessible and can select both "IONOS Model Hub" and "IONOS Studio" model sources
+- ✅ Pods are running without `ImagePullBackOff` or `CrashLoopBackOff` errors
+
+---
+
+## 9) Common Issues
+
+**ImagePullBackOff** → Rebuild with `--platform linux/amd64` (Apple Silicon)
+
+**Secrets not updating** → `kubectl rollout restart deployment/backend -n default`
+
+**CI/CD not triggering** → Use `0.2.0` not `v0.2.0` tag format
+
+**Studio 401 errors** → Check `STUDIO_API_KEY` and `STUDIO_ORG_ID` in secrets
+
+**Debug pods** → `kubectl logs -l app=backend -n default --tail=50`
 
 ---
