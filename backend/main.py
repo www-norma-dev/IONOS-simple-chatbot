@@ -76,7 +76,7 @@ async def get_studio_models():
         "qwen-gdpr": os.getenv("STUDIO_MODEL_QWEN_GDPR"),
         "granite-gdpr": os.getenv("STUDIO_MODEL_GRANITE_GDPR"),
         "qwen3-sharegpt": os.getenv("STUDIO_QWEN3_SHAREGPT"),
-        "Qwen3-customersupport": os.getenv("STUDIO_QWEN3_customersupport"),
+        "Qwen3-customersupport": os.getenv("STUDIO_QWEN3_CUSTOMERSUPPORT"),
         "AlpacaBot": os.getenv("STUDIO_ALPACA_BOT"),
     }
     # Filter out None values
